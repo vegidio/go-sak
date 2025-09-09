@@ -65,7 +65,7 @@ func Do[T any](
 	return val.(T), nil
 }
 
-func NewMemoryOnly(opts MemoryOpts) (*Memoizer, error) {
+func NewMemoryOnly(opts CacheOpts) (*Memoizer, error) {
 	mem, err := newMemoryStore(opts)
 	if err != nil {
 		return nil, err
@@ -74,8 +74,8 @@ func NewMemoryOnly(opts MemoryOpts) (*Memoizer, error) {
 	return newMemoizer(mem), nil
 }
 
-func NewDiskOnly(path string) (*Memoizer, error) {
-	d, err := newDiskStore(path)
+func NewDiskOnly(directory string, opts CacheOpts) (*Memoizer, error) {
+	d, err := newDiskStore(directory, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -83,12 +83,12 @@ func NewDiskOnly(path string) (*Memoizer, error) {
 	return newMemoizer(d), nil
 }
 
-func NewMemoryDisk(path string, memOpts MemoryOpts, promoteTTL time.Duration) (*Memoizer, func() error, error) {
-	mem, err := newMemoryStore(memOpts)
+func NewMemoryDisk(path string, opts CacheOpts, promoteTTL time.Duration) (*Memoizer, func() error, error) {
+	mem, err := newMemoryStore(opts)
 	if err != nil {
 		return nil, nil, err
 	}
-	disk, err := newDiskStore(path)
+	disk, err := newDiskStore(path, opts)
 
 	if err != nil {
 		mem.Close()

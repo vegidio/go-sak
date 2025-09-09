@@ -11,18 +11,27 @@ import (
 
 type diskStore struct{ db *badger.DB }
 
-func newDiskStore(path string) (*diskStore, error) {
-	db, err := badger.Open(badger.Options{
-		Dir:               path,
-		ValueDir:          path,
-		Compression:       options.ZSTD,
-		DetectConflicts:   false,
-		NumVersionsToKeep: 1,
-		IndexCacheSize:    64 << 20,
-	})
+func newDiskStore(path string, opts CacheOpts) (*diskStore, error) {
+	if opts.MaxEntries == 0 {
+		opts.MaxEntries = 1_000_000
+	}
+	if opts.MaxCapacity == 0 {
+		opts.MaxCapacity = 1 << 30 // 1 GiB
+	}
+
+	db, err := badger.Open(badger.DefaultOptions(path).
+		WithCompression(options.ZSTD).
+		WithLogger(nil).
+		WithDetectConflicts(false).
+		WithIndexCacheSize(64 << 20).
+		WithValueLogMaxEntries(uint32(opts.MaxEntries)).
+		WithValueLogFileSize(opts.MaxCapacity))
 	if err != nil {
 		return nil, err
 	}
+
+	// Run value log GC
+	db.RunValueLogGC(0.5)
 
 	return &diskStore{db: db}, nil
 }
