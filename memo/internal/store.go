@@ -1,4 +1,4 @@
-package memoizer
+package internal
 
 import (
 	"context"
@@ -12,8 +12,8 @@ type Store interface {
 }
 
 type CacheOpts struct {
-	// MaxEntries ~ 10x expected items
+	// MaxEntries is the max number of entries to store.
 	MaxEntries int64
-	// MaxCapacity is the capacity in your chosen units; we use value bytes as cost.
+	// MaxCapacity is the max capacity in bytes.
 	MaxCapacity int64
 }

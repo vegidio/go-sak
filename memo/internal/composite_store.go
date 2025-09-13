@@ -1,21 +1,21 @@
-package memoizer
+package internal
 
 import (
 	"context"
 	"time"
 )
 
-type compositeStore struct {
+type CompositeStore struct {
 	mem    Store
 	disk   Store
 	hotTTL time.Duration // TTL for memory promotion
 }
 
-func newCompositeStore(mem, disk Store, hotTTL time.Duration) *compositeStore {
-	return &compositeStore{mem: mem, disk: disk, hotTTL: hotTTL}
+func NewCompositeStore(mem, disk Store, hotTTL time.Duration) *CompositeStore {
+	return &CompositeStore{mem: mem, disk: disk, hotTTL: hotTTL}
 }
 
-func (s *compositeStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
+func (s *CompositeStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if s.mem != nil {
 		if b, ok, err := s.mem.Get(ctx, key); err != nil {
 			return nil, false, err
@@ -38,7 +38,7 @@ func (s *compositeStore) Get(ctx context.Context, key string) ([]byte, bool, err
 	return nil, false, nil
 }
 
-func (s *compositeStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
+func (s *CompositeStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
 	var firstErr error
 	if s.disk != nil {
 		if err := s.disk.Set(ctx, key, value, ttl); err != nil {
@@ -55,7 +55,7 @@ func (s *compositeStore) Set(ctx context.Context, key string, value []byte, ttl 
 	return firstErr
 }
 
-func (s *compositeStore) Close() error {
+func (s *CompositeStore) Close() error {
 	var firstErr error
 	if s.mem != nil {
 		if err := s.mem.Close(); err != nil {

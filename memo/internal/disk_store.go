@@ -1,4 +1,4 @@
-package memoizer
+package internal
 
 import (
 	"context"
@@ -9,9 +9,9 @@ import (
 	"github.com/dgraph-io/badger/v4/options"
 )
 
-type diskStore struct{ db *badger.DB }
+type DiskStore struct{ db *badger.DB }
 
-func newDiskStore(path string, opts CacheOpts) (*diskStore, error) {
+func NewDiskStore(path string, opts CacheOpts) (*DiskStore, error) {
 	if opts.MaxEntries == 0 {
 		opts.MaxEntries = 1_000_000
 	}
@@ -33,10 +33,10 @@ func newDiskStore(path string, opts CacheOpts) (*diskStore, error) {
 	// Run value log GC
 	db.RunValueLogGC(0.5)
 
-	return &diskStore{db: db}, nil
+	return &DiskStore{db: db}, nil
 }
 
-func (s *diskStore) Get(_ context.Context, key string) ([]byte, bool, error) {
+func (s *DiskStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 	var out []byte
 	err := s.db.View(func(txn *badger.Txn) error {
 		it, err := txn.Get([]byte(key))
@@ -60,11 +60,11 @@ func (s *diskStore) Get(_ context.Context, key string) ([]byte, bool, error) {
 	return nil, false, err
 }
 
-func (s *diskStore) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
+func (s *DiskStore) Set(_ context.Context, key string, value []byte, ttl time.Duration) error {
 	return s.db.Update(func(txn *badger.Txn) error {
 		e := badger.NewEntry([]byte(key), value).WithTTL(ttl)
 		return txn.SetEntry(e)
 	})
 }
 
-func (s *diskStore) Close() error { return s.db.Close() }
+func (s *DiskStore) Close() error { return s.db.Close() }
