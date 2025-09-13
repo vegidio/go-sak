@@ -7,6 +7,27 @@ import (
 	"time"
 )
 
+// Do executes a memoized computation with the given key and TTL.
+//
+// This function implements a memoization pattern with caching and deduplication:
+//  1. First checks if the result exists in the cache
+//  2. If not cached, uses singleflight to deduplicate concurrent calls with the same key
+//  3. Executes the compute function and caches the result with the specified TTL
+//
+// The function is generic and works with any type T that can be encoded/decoded with gob.
+//
+// # Parameters:
+//   - m: The Memoizer instance containing the cache store and singleflight group
+//   - ctx: Context for cancellation and timeouts
+//   - key: Unique identifier for caching the computation result
+//   - ttl: Time-to-live duration for the cached result
+//   - compute: Function that performs the actual computation, called only on cache miss
+//
+// Returns the computed result of type T and any error that occurred during cache retrieval, computation, or
+// encoding/decoding.
+//
+// If the cache retrieval fails, the error is returned immediately; if the compute function fails, its error is
+// returned; cache write failures are ignored (best-effort caching).
 func Do[T any](
 	m *Memoizer,
 	ctx context.Context,

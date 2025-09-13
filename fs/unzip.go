@@ -9,6 +9,26 @@ import (
 	"strings"
 )
 
+// Unzip extracts all files and directories from a ZIP archive to a target directory. It creates the target directory if
+// it doesn't exist and preserves the directory structure from the archive.
+//
+// The function implements security measures to prevent Zip Slip attacks by:
+//   - Rejecting absolute paths in archive entries
+//   - Preventing path traversal attacks using ".." segments
+//   - Normalizing path separators to handle both forward slashes and backslashes
+//   - Validating that extracted files remain within the target directory
+//
+// # Parameters:
+//   - zipPath: Path to the ZIP file to extract
+//   - targetDirectory: Destination directory where files will be extracted
+//
+// # Returns an error if:
+//   - The ZIP file cannot be opened or read
+//   - The target directory cannot be created
+//   - Any archive entry contains an illegal path (absolute or traversal)
+//   - File extraction fails due to I/O errors or permission issues
+//
+// All extracted files are set to executable mode (0755).
 func Unzip(zipPath, targetDirectory string) error {
 	// Open the zip file specified by zipPath
 	r, err := zip.OpenReader(zipPath)
