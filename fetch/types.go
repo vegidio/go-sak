@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/zeebo/blake3"
 )
 
 // Request
@@ -26,6 +28,7 @@ type Response struct {
 	Size       int64
 	Downloaded int64
 	Progress   float64
+	Hash       string
 	Done       chan struct{} `json:"-"`
 
 	cancel context.CancelFunc
@@ -101,6 +104,7 @@ func (r *Response) Track(callback func(completed, total int64, progress float64)
 
 type progressWriter struct {
 	file     io.Writer
+	hasher   *blake3.Hasher
 	callback func(downloaded int64)
 }
 
@@ -108,6 +112,13 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	n, err := pw.file.Write(p)
 	if err != nil {
 		return n, err
+	}
+
+	if pw.hasher != nil {
+		m, err := pw.hasher.Write(p)
+		if err != nil {
+			return m, err
+		}
 	}
 
 	if pw.callback != nil {

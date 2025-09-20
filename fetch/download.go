@@ -2,6 +2,7 @@ package fetch
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/zeebo/blake3"
 )
 
 // NewRequest creates a new download request with the specified URL and file path.
@@ -71,24 +73,33 @@ func (f *Fetch) DownloadFile(request *Request) *Response {
 			offset = info.Size()
 		}
 
-		// Open (or create) a file for appending
-		file, err := os.OpenFile(request.FilePath, os.O_CREATE|os.O_WRONLY, 0o644)
+		// Open (or create) a file for appending and reading (needed to hash existing bytes)
+		file, err := os.OpenFile(request.FilePath, os.O_CREATE|os.O_RDWR, 0o644)
 		if err != nil {
 			response.err = fmt.Errorf("could not open file: %w", err)
 			return
 		}
 
 		defer file.Close()
+		hasher := blake3.New()
 
-		// Seek to the end of existing data
-		if _, fErr := file.Seek(offset, io.SeekStart); fErr != nil {
-			response.err = fmt.Errorf("could not seek: %w", fErr)
-			return
+		if offset > 0 {
+			if _, hashErr := io.CopyN(hasher, file, offset); hashErr != nil {
+				response.err = fmt.Errorf("could not hash existing data: %w", hashErr)
+				return
+			}
+
+			// Seek to the end of existing data
+			if _, fErr := file.Seek(offset, io.SeekStart); fErr != nil {
+				response.err = fmt.Errorf("could not seek: %w", fErr)
+				return
+			}
 		}
 
 		// Set up the progress callback
 		pw := &progressWriter{
-			file: file,
+			file:   file,
+			hasher: hasher,
 			callback: func(downloaded int64) {
 				response.Downloaded += downloaded
 				if response.Size > 0 {
@@ -99,6 +110,9 @@ func (f *Fetch) DownloadFile(request *Request) *Response {
 
 		// Perform the download (with resume & retries)
 		f.downloadWithRetries(response, offset, file, pw, ctx)
+
+		sum := hasher.Sum(nil)
+		response.Hash = hex.EncodeToString(sum)
 	}()
 
 	return response

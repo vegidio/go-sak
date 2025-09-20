@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/zeebo/blake3"
 )
 
 func TestNewRequest(t *testing.T) {
@@ -136,6 +137,23 @@ func TestDownloadFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Calculate expected hash for the test
+			var expectedHash string
+			if !tt.expectedError && tt.expectedStatus != http.StatusNotFound {
+				hasher := blake3.New()
+				if tt.existingFile != "" && tt.serverStatus == http.StatusPartialContent {
+					// For resume test, hash the complete content
+					completeContent := tt.existingFile + tt.serverContent[len(tt.existingFile):]
+					hasher.Write([]byte(completeContent))
+				} else if tt.existingFile != "" && tt.serverStatus == http.StatusRequestedRangeNotSatisfiable {
+					// For already complete download, hash the existing content
+					hasher.Write([]byte(tt.existingFile))
+				} else if tt.serverStatus == http.StatusOK || tt.serverStatus == http.StatusPartialContent {
+					hasher.Write([]byte(tt.serverContent))
+				}
+				expectedHash = fmt.Sprintf("%x", hasher.Sum(nil))
+			}
+
 			// Setup test server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Set custom headers
@@ -181,6 +199,11 @@ func TestDownloadFile(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedStatus, response.StatusCode)
 				assert.True(t, response.IsComplete())
+
+				// Verify hash matches expected value
+				if expectedHash != "" {
+					assert.Equal(t, expectedHash, response.Hash, "Hash should match expected Blake3 hash")
+				}
 
 				if tt.serverStatus == http.StatusOK || tt.serverStatus == http.StatusPartialContent {
 					// Verify file content
@@ -243,6 +266,14 @@ func TestDownloadFiles(t *testing.T) {
 	// Create test servers
 	servers := make([]*httptest.Server, 3)
 	contents := []string{"Content 1", "Content 2", "Content 3"}
+	expectedHashes := make([]string, len(contents))
+
+	// Calculate expected hashes
+	for i, content := range contents {
+		hasher := blake3.New()
+		hasher.Write([]byte(content))
+		expectedHashes[i] = fmt.Sprintf("%x", hasher.Sum(nil))
+	}
 
 	for i := range servers {
 		content := contents[i]
@@ -285,6 +316,16 @@ func TestDownloadFiles(t *testing.T) {
 		content, readErr := os.ReadFile(response.Request.FilePath)
 		assert.NoError(t, readErr)
 		assert.Contains(t, contents, string(content))
+
+		// Find which content this response corresponds to and verify hash
+		contentStr := string(content)
+		for i, expectedContent := range contents {
+			if contentStr == expectedContent {
+				assert.Equal(t, expectedHashes[i], response.Hash,
+					"Hash should match expected Blake3 hash for content: %s", expectedContent)
+				break
+			}
+		}
 	}
 
 	// Test cancellation functionality
@@ -314,6 +355,11 @@ func TestDownloadWithRetries(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
+	testContent := "Success after retries"
+	hasher := blake3.New()
+	hasher.Write([]byte(testContent))
+	expectedHash := fmt.Sprintf("%x", hasher.Sum(nil))
+
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++
@@ -321,7 +367,7 @@ func TestDownloadWithRetries(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		} else {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("Success after retries"))
+			w.Write([]byte(testContent))
 		}
 	}))
 	defer server.Close()
@@ -337,10 +383,11 @@ func TestDownloadWithRetries(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, response.StatusCode)
 	assert.Equal(t, 3, attempts) // Should have tried 3 times
+	assert.Equal(t, expectedHash, response.Hash, "Hash should match expected Blake3 hash")
 
 	content, readErr := os.ReadFile(filePath)
 	assert.NoError(t, readErr)
-	assert.Equal(t, "Success after retries", string(content))
+	assert.Equal(t, testContent, string(content))
 }
 
 func TestDownloadWithRangeRequest(t *testing.T) {
@@ -349,6 +396,9 @@ func TestDownloadWithRangeRequest(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	fullContent := "0123456789abcdefghijklmnopqrstuvwxyz"
+	hasher := blake3.New()
+	hasher.Write([]byte(fullContent))
+	expectedHash := fmt.Sprintf("%x", hasher.Sum(nil))
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rangeHeader := r.Header.Get("Range")
@@ -372,7 +422,7 @@ func TestDownloadWithRangeRequest(t *testing.T) {
 
 	filePath := filepath.Join(tempDir, "range_test.txt")
 
-	// Create partial file
+	// Create a partial file
 	partialContent := fullContent[:10]
 	err = os.WriteFile(filePath, []byte(partialContent), 0644)
 	require.NoError(t, err)
@@ -384,8 +434,9 @@ func TestDownloadWithRangeRequest(t *testing.T) {
 	response := f.DownloadFile(req)
 	err = response.Error()
 	assert.NoError(t, err)
+	assert.Equal(t, expectedHash, response.Hash, "Hash should match expected Blake3 hash of complete file")
 
-	// Verify complete file
+	// Verify the complete file
 	content, readErr := os.ReadFile(filePath)
 	assert.NoError(t, readErr)
 	assert.Equal(t, fullContent, string(content))
@@ -496,6 +547,11 @@ func TestDownloadFilesParallelism(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
+	// Calculate expected hash for "content"
+	hasher := blake3.New()
+	hasher.Write([]byte("content"))
+	expectedHash := fmt.Sprintf("%x", hasher.Sum(nil))
+
 	// Track concurrent requests
 	var activeRequests int32
 	var maxConcurrent int32
@@ -544,6 +600,11 @@ func TestDownloadFilesParallelism(t *testing.T) {
 
 	assert.Len(t, responses, 5)
 	assert.LessOrEqual(t, maxConcurrent, int32(2)) // Should not exceed parallelism limit
+
+	// Verify all responses have the correct hash
+	for _, response := range responses {
+		assert.Equal(t, expectedHash, response.Hash, "All responses should have the same Blake3 hash")
+	}
 }
 
 func TestResponseBytes(t *testing.T) {
@@ -552,6 +613,10 @@ func TestResponseBytes(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	testContent := "This is test content for the Bytes method"
+	hasher := blake3.New()
+	hasher.Write([]byte(testContent))
+	expectedHash := fmt.Sprintf("%x", hasher.Sum(nil))
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(testContent))
@@ -566,6 +631,7 @@ func TestResponseBytes(t *testing.T) {
 	response := f.DownloadFile(req)
 	err = response.Error()
 	require.NoError(t, err)
+	assert.Equal(t, expectedHash, response.Hash, "Hash should match expected Blake3 hash")
 
 	// Test Bytes method
 	content, err := response.Bytes()
@@ -589,4 +655,32 @@ func TestResponseBytesFileNotFound(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to read file")
 	assert.Nil(t, content)
+}
+
+func TestBlake3FileHash(t *testing.T) {
+	tempDir, err := os.MkdirTemp("", "blake3_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	// Create a file with known content
+	testContent := "Hello, World!"
+	expectedHash := "288a86a79f20a3d6dccdca7713beaed178798296bdfa7913fa2a62d9727bf8f8"
+	filePath := filepath.Join(tempDir, "test_file.txt")
+
+	err = os.WriteFile(filePath, []byte(testContent), 0644)
+	require.NoError(t, err)
+
+	// Calculate hash using Blake3
+	hasher := blake3.New()
+	fileContent, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+
+	_, err = hasher.Write(fileContent)
+	require.NoError(t, err)
+
+	actualHash := fmt.Sprintf("%x", hasher.Sum(nil))
+
+	// Verify the hash matches the expected value
+	assert.Equal(t, expectedHash, actualHash)
+	assert.Equal(t, testContent, string(fileContent))
 }
