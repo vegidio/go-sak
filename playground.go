@@ -2,25 +2,28 @@ package main
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/vegidio/go-sak/fetch"
+	"github.com/vegidio/go-sak/async"
 )
 
 func main() {
-	cookies := fetch.GetBrowserCookies("simpcity.cr")
-	cookiesHeader := map[string]string{
-		"Cookie": fetch.CookiesToHeader(cookies),
+	in := make(chan int)
+
+	// Producer
+	go func() {
+		for i := 1; i <= 50; i++ {
+			in <- i
+		}
+		close(in)
+	}()
+
+	out := async.ProcessChannel(in, 5, func(n int) string {
+		time.Sleep(3 * time.Second) // simulate work
+		return fmt.Sprintf("Time %s, result %d", time.Now(), n)
+	})
+
+	for result := range out {
+		fmt.Println(result)
 	}
-
-	fmt.Println(cookiesHeader)
-
-	f := fetch.New(cookiesHeader, 0)
-	html, err := f.GetText("https://simpcity.cr/threads/jessica-nigri.9946/")
-
-	if err != nil {
-		fmt.Printf("Error fetching html: %v\n", err)
-		return
-	}
-
-	fmt.Println(html)
 }
