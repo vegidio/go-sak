@@ -117,11 +117,45 @@ func (f *Fetch) GetText(url string) (string, error) {
 //   - *resty.Response: the response from the GET request.
 //   - error: an error if the request fails or the response indicates an error.
 func (f *Fetch) GetResult(url string, headers map[string]string, result interface{}) (*resty.Response, error) {
-	resp, err := f.restClient.R().
+	return f.doRequest(url, headers, nil, result, "GET")
+}
+
+// PostResult performs a POST request to the specified URL and unmarshals the response body into the provided result
+// interface.
+//
+// Parameters:
+//   - url: the URL to send the POST request to.
+//   - result: a pointer to the variable where the response body will be unmarshalled.
+//
+// Returns:
+//   - *resty.Response: the response from the POST request.
+//   - error: an error if the request fails or the response indicates an error.
+func (f *Fetch) PostResult(url string, headers map[string]string, body interface{}, result interface{}) (*resty.Response, error) {
+	return f.doRequest(url, headers, body, result, "POST")
+}
+
+// doRequest performs an HTTP request with the specified method and handles common error logging
+func (f *Fetch) doRequest(url string, headers map[string]string, body interface{}, result interface{}, method string) (*resty.Response, error) {
+	req := f.restClient.R().
 		SetHeaders(headers).
 		ForceContentType("application/json").
-		SetResult(result).
-		Get(url)
+		SetResult(result)
+
+	if body != nil {
+		req.SetBody(body)
+	}
+
+	var resp *resty.Response
+	var err error
+
+	switch method {
+	case "GET":
+		resp, err = req.Get(url)
+	case "POST":
+		resp, err = req.Post(url)
+	default:
+		return nil, fmt.Errorf("unsupported HTTP method: %s", method)
+	}
 
 	if err != nil {
 		log.WithFields(log.Fields{
