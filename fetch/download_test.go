@@ -50,7 +50,7 @@ func TestNewRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			f := New(tt.headers, 3)
 
-			req, err := f.NewRequest(tt.url, tt.filePath)
+			req, err := f.NewRequest(tt.url, tt.filePath, nil)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -182,7 +182,7 @@ func TestDownloadFile(t *testing.T) {
 			}
 
 			f := New(nil, 1)
-			req, err := f.NewRequest(server.URL, filePath)
+			req, err := f.NewRequest(server.URL, filePath, nil)
 			require.NoError(t, err)
 
 			response := f.DownloadFile(req)
@@ -242,7 +242,7 @@ func TestDownloadFileWithCancel(t *testing.T) {
 
 	filePath := filepath.Join(tempDir, "cancel_test.txt")
 	f := New(nil, 0)
-	req, err := f.NewRequest(server.URL, filePath)
+	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
 	response := f.DownloadFile(req)
@@ -291,7 +291,7 @@ func TestDownloadFiles(t *testing.T) {
 
 	for i, server := range servers {
 		filePath := filepath.Join(tempDir, fmt.Sprintf("file_%d.txt", i))
-		req, reqErr := f.NewRequest(server.URL, filePath)
+		req, reqErr := f.NewRequest(server.URL, filePath, nil)
 		require.NoError(t, reqErr)
 		requests[i] = req
 	}
@@ -374,7 +374,7 @@ func TestDownloadWithRetries(t *testing.T) {
 
 	filePath := filepath.Join(tempDir, "retry_test.txt")
 	f := New(nil, 3) // 3 retries
-	req, err := f.NewRequest(server.URL, filePath)
+	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
 	response := f.DownloadFile(req)
@@ -428,7 +428,7 @@ func TestDownloadWithRangeRequest(t *testing.T) {
 	require.NoError(t, err)
 
 	f := New(nil, 1)
-	req, err := f.NewRequest(server.URL, filePath)
+	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
 	response := f.DownloadFile(req)
@@ -532,7 +532,7 @@ func TestDownloadFilePermissionError(t *testing.T) {
 	filePath := "/root/nonexistent/file.txt"
 
 	f := New(nil, 1)
-	req, err := f.NewRequest(server.URL, filePath)
+	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
 	response := f.DownloadFile(req)
@@ -583,7 +583,7 @@ func TestDownloadFilesParallelism(t *testing.T) {
 
 	for i := range requests {
 		filePath := filepath.Join(tempDir, fmt.Sprintf("parallel_%d.txt", i))
-		req, reqErr := f.NewRequest(server.URL, filePath)
+		req, reqErr := f.NewRequest(server.URL, filePath, nil)
 		require.NoError(t, reqErr)
 		requests[i] = req
 	}
@@ -625,7 +625,7 @@ func TestResponseBytes(t *testing.T) {
 
 	filePath := filepath.Join(tempDir, "bytes_test.txt")
 	f := New(nil, 1)
-	req, err := f.NewRequest(server.URL, filePath)
+	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
 	response := f.DownloadFile(req)

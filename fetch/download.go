@@ -19,17 +19,22 @@ import (
 // Parameters:
 //   - url: The URL to download the file from.
 //   - filePath: The path where the downloaded file will be saved.
+//   - headers: Optional headers to set on the request.
 //
 // Returns:
 //   - A Request object containing the URL and file path.
 //   - An error if the request creation fails.
-func (f *Fetch) NewRequest(url string, filePath string) (*Request, error) {
+func (f *Fetch) NewRequest(url string, filePath string, headers map[string]string) (*Request, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
 	for key, value := range f.headers {
+		req.Header.Set(key, value)
+	}
+
+	for key, value := range headers {
 		req.Header.Set(key, value)
 	}
 
