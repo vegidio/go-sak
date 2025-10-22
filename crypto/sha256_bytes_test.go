@@ -6,28 +6,28 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestSha256Hash(t *testing.T) {
-	t.Run("Success with simple string", func(t *testing.T) {
+func TestSha256Bytes(t *testing.T) {
+	t.Run("success with simple string bytes", func(t *testing.T) {
 		// Act
-		hash, err := Sha256Hash("hello world")
+		hash, err := Sha256Bytes([]byte("hello world"))
 
 		// Assert
 		assert.NoError(t, err)
 		assert.Equal(t, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", hash)
 	})
 
-	t.Run("Success with empty string", func(t *testing.T) {
+	t.Run("success with empty bytes", func(t *testing.T) {
 		// Act
-		hash, err := Sha256Hash("")
+		hash, err := Sha256Bytes([]byte(""))
 
 		// Assert
 		assert.NoError(t, err)
 		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash)
 	})
 
-	t.Run("Success with special characters", func(t *testing.T) {
+	t.Run("success with special characters", func(t *testing.T) {
 		// Act
-		hash, err := Sha256Hash("Hello, 世界! 🌍")
+		hash, err := Sha256Bytes([]byte("Hello, 世界! 🌍"))
 
 		// Assert
 		assert.NoError(t, err)
@@ -35,9 +35,9 @@ func TestSha256Hash(t *testing.T) {
 		assert.Len(t, hash, 64) // SHA-256 produces 64 hex characters
 	})
 
-	t.Run("Success with newlines and tabs", func(t *testing.T) {
+	t.Run("success with newlines and tabs", func(t *testing.T) {
 		// Act
-		hash, err := Sha256Hash("line1\nline2\tline3")
+		hash, err := Sha256Bytes([]byte("line1\nline2\tline3"))
 
 		// Assert
 		assert.NoError(t, err)
@@ -45,7 +45,7 @@ func TestSha256Hash(t *testing.T) {
 		assert.Len(t, hash, 64)
 	})
 
-	t.Run("Success with long string", func(t *testing.T) {
+	t.Run("success with large byte slice", func(t *testing.T) {
 		// Arrange
 		longString := ""
 		for i := 0; i < 10000; i++ {
@@ -53,7 +53,7 @@ func TestSha256Hash(t *testing.T) {
 		}
 
 		// Act
-		hash, err := Sha256Hash(longString)
+		hash, err := Sha256Bytes([]byte(longString))
 
 		// Assert
 		assert.NoError(t, err)
@@ -61,13 +61,13 @@ func TestSha256Hash(t *testing.T) {
 		assert.Len(t, hash, 64)
 	})
 
-	t.Run("Consistency check - same input produces same hash", func(t *testing.T) {
+	t.Run("consistency check - same input produces same hash", func(t *testing.T) {
 		// Arrange
-		input := "test string for consistency"
+		input := []byte("test string for consistency")
 
 		// Act
-		hash1, err1 := Sha256Hash(input)
-		hash2, err2 := Sha256Hash(input)
+		hash1, err1 := Sha256Bytes(input)
+		hash2, err2 := Sha256Bytes(input)
 
 		// Assert
 		assert.NoError(t, err1)
@@ -75,10 +75,10 @@ func TestSha256Hash(t *testing.T) {
 		assert.Equal(t, hash1, hash2)
 	})
 
-	t.Run("Different inputs produce different hashes", func(t *testing.T) {
+	t.Run("different inputs produce different hashes", func(t *testing.T) {
 		// Act
-		hash1, err1 := Sha256Hash("string1")
-		hash2, err2 := Sha256Hash("string2")
+		hash1, err1 := Sha256Bytes([]byte("string1"))
+		hash2, err2 := Sha256Bytes([]byte("string2"))
 
 		// Assert
 		assert.NoError(t, err1)
@@ -86,9 +86,9 @@ func TestSha256Hash(t *testing.T) {
 		assert.NotEqual(t, hash1, hash2)
 	})
 
-	t.Run("Hash format validation", func(t *testing.T) {
+	t.Run("hash format validation", func(t *testing.T) {
 		// Act
-		hash, err := Sha256Hash("test")
+		hash, err := Sha256Bytes([]byte("test"))
 
 		// Assert
 		assert.NoError(t, err)
@@ -96,7 +96,7 @@ func TestSha256Hash(t *testing.T) {
 		assert.Regexp(t, "^[0-9a-f]{64}$", hash, "Hash should only contain lowercase hex characters")
 	})
 
-	t.Run("Known test vectors", func(t *testing.T) {
+	t.Run("known test vectors", func(t *testing.T) {
 		testCases := []struct {
 			input    string
 			expected string
@@ -118,7 +118,7 @@ func TestSha256Hash(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.input, func(t *testing.T) {
 				// Act
-				hash, err := Sha256Hash(tc.input)
+				hash, err := Sha256Bytes([]byte(tc.input))
 
 				// Assert
 				assert.NoError(t, err)
@@ -127,12 +127,12 @@ func TestSha256Hash(t *testing.T) {
 		}
 	})
 
-	t.Run("Binary data in string", func(t *testing.T) {
+	t.Run("binary data", func(t *testing.T) {
 		// Arrange
 		binaryString := "\x00\x01\x02\x03\xff\xfe"
 
 		// Act
-		hash, err := Sha256Hash(binaryString)
+		hash, err := Sha256Bytes([]byte(binaryString))
 
 		// Assert
 		assert.NoError(t, err)
@@ -140,10 +140,10 @@ func TestSha256Hash(t *testing.T) {
 		assert.Len(t, hash, 64)
 	})
 
-	t.Run("Case sensitivity", func(t *testing.T) {
+	t.Run("case sensitivity", func(t *testing.T) {
 		// Act
-		hashLower, err1 := Sha256Hash("hello")
-		hashUpper, err2 := Sha256Hash("HELLO")
+		hashLower, err1 := Sha256Bytes([]byte("hello"))
+		hashUpper, err2 := Sha256Bytes([]byte("HELLO"))
 
 		// Assert
 		assert.NoError(t, err1)
@@ -151,11 +151,11 @@ func TestSha256Hash(t *testing.T) {
 		assert.NotEqual(t, hashLower, hashUpper, "Hashes should differ for different cases")
 	})
 
-	t.Run("Whitespace differences", func(t *testing.T) {
+	t.Run("whitespace differences", func(t *testing.T) {
 		// Act
-		hash1, err1 := Sha256Hash("hello world")
-		hash2, err2 := Sha256Hash("hello  world") // two spaces
-		hash3, err3 := Sha256Hash("helloworld")
+		hash1, err1 := Sha256Bytes([]byte("hello world"))
+		hash2, err2 := Sha256Bytes([]byte("hello  world")) // two spaces
+		hash3, err3 := Sha256Bytes([]byte("helloworld"))
 
 		// Assert
 		assert.NoError(t, err1)
@@ -166,10 +166,10 @@ func TestSha256Hash(t *testing.T) {
 		assert.NotEqual(t, hash2, hash3)
 	})
 
-	t.Run("Numeric strings", func(t *testing.T) {
+	t.Run("numeric strings", func(t *testing.T) {
 		// Act
-		hash1, err1 := Sha256Hash("12345")
-		hash2, err2 := Sha256Hash("123456")
+		hash1, err1 := Sha256Bytes([]byte("12345"))
+		hash2, err2 := Sha256Bytes([]byte("123456"))
 
 		// Assert
 		assert.NoError(t, err1)
