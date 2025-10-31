@@ -8,6 +8,7 @@ require (
 	github.com/dgraph-io/ristretto/v2 v2.2.0
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/google/go-github/v74 v74.0.0
+	github.com/otiai10/copy v1.14.1
 	github.com/samber/lo v1.51.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
@@ -36,6 +37,7 @@ require (
 	github.com/keybase/go-keychain v0.0.1 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.12 // indirect
+	github.com/otiai10/mint v1.6.3 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/zalando/go-keyring v0.2.6 // indirect

@@ -8,10 +8,10 @@ import (
 	"github.com/samber/lo"
 )
 
-type Flags uint8
+type ListFlags uint8
 
 const (
-	LpDir Flags = 1 << iota
+	LpDir ListFlags = 1 << iota
 	LpFile
 	LpRecursive
 )
@@ -40,7 +40,7 @@ const (
 //
 //	// List both files and directories recursively, filtering for .txt and .md files
 //	paths, err := ListPath("/docs", LpFile|LpDir|LpRecursive, []string{".txt", ".md"})
-func ListPath(directory string, flags Flags, fileExt []string) ([]string, error) {
+func ListPath(directory string, flags ListFlags, fileExt []string) ([]string, error) {
 	entries := make([]string, 0)
 
 	includeDir := flags&LpDir != 0

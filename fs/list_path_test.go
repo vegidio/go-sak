@@ -233,15 +233,15 @@ func TestListPath(t *testing.T) {
 func TestListPathFlags(t *testing.T) {
 	t.Run("flag combinations", func(t *testing.T) {
 		// Test individual flags
-		assert.Equal(t, Flags(1), LpDir)
-		assert.Equal(t, Flags(2), LpFile)
-		assert.Equal(t, Flags(4), LpRecursive)
+		assert.Equal(t, ListFlags(1), LpDir)
+		assert.Equal(t, ListFlags(2), LpFile)
+		assert.Equal(t, ListFlags(4), LpRecursive)
 
 		// Test flag combinations
 		combined := LpDir | LpFile
-		assert.NotEqual(t, Flags(0), combined&LpDir)
-		assert.NotEqual(t, Flags(0), combined&LpFile)
-		assert.Equal(t, Flags(0), combined&LpRecursive)
+		assert.NotEqual(t, ListFlags(0), combined&LpDir)
+		assert.NotEqual(t, ListFlags(0), combined&LpFile)
+		assert.Equal(t, ListFlags(0), combined&LpRecursive)
 	})
 }
 
