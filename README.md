@@ -96,6 +96,10 @@ File system operations including temporary file/directory creation, user config 
 
 Copies files and/or directories to a destination directory with flexible options. The flags parameter controls copy behavior. The exts parameter filters files by extension. If nil or empty, no extension filtering is applied.
 
+#### `MoveFiles(sources []string, destDir string, flags CmFlags, exts []string) error`
+
+Moves files and/or directories to a destination directory with flexible options. The flags parameter controls move behavior (CmRecursive for subdirectories, CmPreserveStructure to maintain directory structure). The exts parameter filters files by extension. If nil or empty, no extension filtering is applied.
+
 #### `ListPath(directory string, flags Flags, fileExt []string) ([]string, error)`
 
 Traverses a directory and returns a list of paths based on flags (LpDir, LpFile, LpRecursive) and file extensions. Extensions are case-insensitive and should include the dot (e.g., ".txt").
