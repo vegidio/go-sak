@@ -11,7 +11,9 @@ require (
 	github.com/samber/lo v1.51.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
+	github.com/ulikunitz/xz v0.5.15
 	github.com/zeebo/blake3 v0.2.4
+	github.com/zeebo/xxh3 v1.0.2
 	golang.org/x/mod v0.25.0
 	golang.org/x/sync v0.17.0
 )
@@ -37,7 +39,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/zalando/go-keyring v0.2.6 // indirect
-	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/otel v1.37.0 // indirect
 	go.opentelemetry.io/otel/metric v1.37.0 // indirect
