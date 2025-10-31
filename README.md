@@ -100,6 +100,10 @@ Copies files and/or directories to a destination directory with flexible options
 
 Moves files and/or directories to a destination directory with flexible options. The flags parameter controls move behavior (CmRecursive for subdirectories, CmPreserveStructure to maintain directory structure). The exts parameter filters files by extension. If nil or empty, no extension filtering is applied.
 
+#### `FileExists(path string) bool`
+
+Checks if a file exists at the specified path. Returns true if the path exists and is a file (not a directory). Returns false if the path does not exist or if it is a directory.
+
 #### `ListPath(directory string, flags Flags, fileExt []string) ([]string, error)`
 
 Traverses a directory and returns a list of paths based on flags (LpDir, LpFile, LpRecursive) and file extensions. Extensions are case-insensitive and should include the dot (e.g., ".txt").

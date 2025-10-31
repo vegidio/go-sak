@@ -2,6 +2,7 @@ package fs
 
 import (
 	"archive/tar"
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -114,8 +115,17 @@ func UntarXz(tarXzPath, targetDirectory string) error {
 				return fErr
 			}
 
+			// Use buffered writer for better performance with large files
+			bufWriter := bufio.NewWriterSize(outFile, 1024*1024) // 1MB buffer
+
 			// Copy file contents from the tar archive to destination file
-			if _, err = io.Copy(outFile, tarReader); err != nil {
+			if _, err = io.Copy(bufWriter, tarReader); err != nil {
+				outFile.Close()
+				return err
+			}
+
+			// Flush the buffer before closing
+			if err = bufWriter.Flush(); err != nil {
 				outFile.Close()
 				return err
 			}
