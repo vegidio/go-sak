@@ -6,13 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMapChannel_IntToInt(t *testing.T) {
+func TestSliceToChannel_IntToInt(t *testing.T) {
 	// Given
 	numbers := []int{1, 2, 3, 4, 5}
 	doubleFunc := func(n int) int { return n * 2 }
 
 	// When
-	ch := MapChannel(numbers, doubleFunc)
+	ch := SliceToChannel(numbers, 1, doubleFunc)
 
 	// Then
 	var results []int
@@ -24,13 +24,13 @@ func TestMapChannel_IntToInt(t *testing.T) {
 	assert.Equal(t, expected, results)
 }
 
-func TestMapChannel_IntToString(t *testing.T) {
+func TestSliceToChannel_IntToString(t *testing.T) {
 	// Given
 	numbers := []int{1, 2, 3}
 	toStringFunc := func(n int) string { return string(rune(n + 64)) }
 
 	// When
-	ch := MapChannel(numbers, toStringFunc)
+	ch := SliceToChannel(numbers, 1, toStringFunc)
 
 	// Then
 	var results []string
@@ -42,13 +42,13 @@ func TestMapChannel_IntToString(t *testing.T) {
 	assert.Equal(t, expected, results)
 }
 
-func TestMapChannel_StringToInt(t *testing.T) {
+func TestSliceToChannel_StringToInt(t *testing.T) {
 	// Given
 	strings := []string{"hello", "world", "test"}
 	lengthFunc := func(s string) int { return len(s) }
 
 	// When
-	ch := MapChannel(strings, lengthFunc)
+	ch := SliceToChannel(strings, 1, lengthFunc)
 
 	// Then
 	var results []int
@@ -60,13 +60,13 @@ func TestMapChannel_StringToInt(t *testing.T) {
 	assert.Equal(t, expected, results)
 }
 
-func TestMapChannel_EmptySlice(t *testing.T) {
+func TestSliceToChannel_EmptySlice(t *testing.T) {
 	// Given
 	empty := []int{}
 	identityFunc := func(n int) int { return n }
 
 	// When
-	ch := MapChannel(empty, identityFunc)
+	ch := SliceToChannel(empty, 1, identityFunc)
 
 	// Then
 	var results []int
@@ -77,13 +77,13 @@ func TestMapChannel_EmptySlice(t *testing.T) {
 	assert.Empty(t, results)
 }
 
-func TestMapChannel_SingleElement(t *testing.T) {
+func TestSliceToChannel_SingleElement(t *testing.T) {
 	// Given
 	single := []int{42}
 	squareFunc := func(n int) int { return n * n }
 
 	// When
-	ch := MapChannel(single, squareFunc)
+	ch := SliceToChannel(single, 1, squareFunc)
 
 	// Then
 	var results []int
@@ -95,13 +95,13 @@ func TestMapChannel_SingleElement(t *testing.T) {
 	assert.Equal(t, expected, results)
 }
 
-func TestMapChannel_PreservesOrder(t *testing.T) {
+func TestSliceToChannel_PreservesOrder(t *testing.T) {
 	// Given
 	numbers := []int{5, 3, 8, 1, 9, 2}
 	identityFunc := func(n int) int { return n }
 
 	// When
-	ch := MapChannel(numbers, identityFunc)
+	ch := SliceToChannel(numbers, 1, identityFunc)
 
 	// Then
 	var results []int
@@ -112,13 +112,13 @@ func TestMapChannel_PreservesOrder(t *testing.T) {
 	assert.Equal(t, numbers, results)
 }
 
-func TestMapChannel_ChannelIsClosed(t *testing.T) {
+func TestSliceToChannel_ChannelIsClosed(t *testing.T) {
 	// Given
 	numbers := []int{1, 2, 3}
 	identityFunc := func(n int) int { return n }
 
 	// When
-	ch := MapChannel(numbers, identityFunc)
+	ch := SliceToChannel(numbers, 1, identityFunc)
 
 	// Consume all elements
 	for range ch {
@@ -129,7 +129,7 @@ func TestMapChannel_ChannelIsClosed(t *testing.T) {
 	assert.False(t, ok, "Channel should be closed after all items are processed")
 }
 
-func TestMapChannel_ComplexTransformation(t *testing.T) {
+func TestSliceToChannel_ComplexTransformation(t *testing.T) {
 	// Given
 	type Person struct {
 		Name string
@@ -143,7 +143,7 @@ func TestMapChannel_ComplexTransformation(t *testing.T) {
 	nameFunc := func(p Person) string { return p.Name }
 
 	// When
-	ch := MapChannel(people, nameFunc)
+	ch := SliceToChannel(people, 1, nameFunc)
 
 	// Then
 	var results []string
@@ -155,13 +155,13 @@ func TestMapChannel_ComplexTransformation(t *testing.T) {
 	assert.Equal(t, expected, results)
 }
 
-func TestMapChannel_ReturnsReadOnlyChannel(t *testing.T) {
+func TestSliceToChannel_ReturnsReadOnlyChannel(t *testing.T) {
 	// Given
 	numbers := []int{1, 2, 3}
 	identityFunc := func(n int) int { return n }
 
 	// When
-	ch := MapChannel(numbers, identityFunc)
+	ch := SliceToChannel(numbers, 1, identityFunc)
 
 	// Then - verify it's a read-only channel (compile-time check)
 	// This is implicitly tested by the return type <-chan R

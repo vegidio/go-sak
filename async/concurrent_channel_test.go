@@ -22,7 +22,7 @@ func TestProcessChannel_BasicFunctionality(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, 2, func(n int) int {
+	output := ConcurrentChannel(input, 2, func(n int) int {
 		return n * n
 	})
 
@@ -41,7 +41,7 @@ func TestProcessChannel_EmptyInput(t *testing.T) {
 	close(input)
 
 	// When
-	output := ProcessChannel(input, 3, func(n int) int {
+	output := ConcurrentChannel(input, 3, func(n int) int {
 		return n * 2
 	})
 
@@ -67,7 +67,7 @@ func TestProcessChannel_SingleWorker(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, 1, func(s string) string {
+	output := ConcurrentChannel(input, 1, func(s string) string {
 		return s
 	})
 
@@ -94,7 +94,7 @@ func TestProcessChannel_MultipleWorkers(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, concurrency, func(n int) int {
+	output := ConcurrentChannel(input, concurrency, func(n int) int {
 		return n * 2
 	})
 
@@ -122,7 +122,7 @@ func TestProcessChannel_DifferentTypes(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, 2, func(n int) string {
+	output := ConcurrentChannel(input, 2, func(n int) string {
 		return string(rune('A' + n - 1))
 	})
 
@@ -148,7 +148,7 @@ func TestProcessChannel_OutputChannelCloses(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, 2, func(n int) int {
+	output := ConcurrentChannel(input, 2, func(n int) int {
 		return n
 	})
 
@@ -180,7 +180,7 @@ func TestProcessChannel_ConcurrentProcessing(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, concurrency, func(n int) int {
+	output := ConcurrentChannel(input, concurrency, func(n int) int {
 		mu.Lock()
 		processed[n] = true
 		mu.Unlock()
@@ -212,7 +212,7 @@ func TestProcessChannel_SlowProducer(t *testing.T) {
 
 	// When
 	start := time.Now()
-	output := ProcessChannel(input, 3, func(n int) int {
+	output := ConcurrentChannel(input, 3, func(n int) int {
 		return n
 	})
 
@@ -240,7 +240,7 @@ func TestProcessChannel_SlowFunction(t *testing.T) {
 
 	// When
 	start := time.Now()
-	output := ProcessChannel(input, 5, func(n int) int {
+	output := ConcurrentChannel(input, 5, func(n int) int {
 		time.Sleep(10 * time.Millisecond)
 		return n
 	})
@@ -268,7 +268,7 @@ func TestProcessChannel_ZeroConcurrency(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, 0, func(n int) int {
+	output := ConcurrentChannel(input, 0, func(n int) int {
 		return n * 2
 	})
 
@@ -312,7 +312,7 @@ func TestProcessChannel_ComplexStructs(t *testing.T) {
 	}()
 
 	// When
-	output := ProcessChannel(input, 2, func(p Person) Result {
+	output := ConcurrentChannel(input, 2, func(p Person) Result {
 		return Result{
 			FullName: "Mr/Ms " + p.Name,
 			IsAdult:  p.Age >= 18,

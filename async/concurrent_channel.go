@@ -2,7 +2,7 @@ package async
 
 import "sync"
 
-// ProcessChannel processes items from an input channel concurrently and returns a channel of results. It spawns the
+// ConcurrentChannel processes items from an input channel concurrently and returns a channel of results. It spawns the
 // specified number of worker goroutines to apply the given function to each item.
 //
 // # Type parameters:
@@ -28,7 +28,7 @@ import "sync"
 //		close(numbers)
 //	}()
 //
-//	squares := ProcessChannel(numbers, 3, func(n int) int {
+//	squares := ConcurrentChannel(numbers, 3, func(n int) int {
 //		return n * n
 //	})
 //
@@ -38,7 +38,7 @@ import "sync"
 //
 // Note: The order of results in the output channel is not guaranteed to match
 // the order of items in the input channel due to concurrent processing.
-func ProcessChannel[T any, R any](input <-chan T, concurrency int, fn func(T) R) <-chan R {
+func ConcurrentChannel[T any, R any](input <-chan T, concurrency int, fn func(T) R) <-chan R {
 	output := make(chan R)
 
 	var wg sync.WaitGroup

@@ -14,11 +14,11 @@ go get github.com/vegidio/go-sak
 
 Concurrent processing utilities for channels and slices.
 
-#### `MapChannel[T, R](items []T, fn func(T) R) <-chan R`
+#### `SliceToChannel[T, R](items []T, concurrency int, fn func(T) R) <-chan R`
 
-Applies a transformation function to each element in a slice and returns a read-only channel that emits the transformed results. Processes items asynchronously in a separate goroutine and automatically closes the channel when complete.
+Processes items from an input slice concurrently using the specified number of worker goroutines. Returns a channel of results. Note that the order of results is not guaranteed due to concurrent processing.
 
-#### `ProcessChannel[T, R](input <-chan T, concurrency int, fn func(T) R) <-chan R`
+#### `ConcurrentChannel[T, R](input <-chan T, concurrency int, fn func(T) R) <-chan R`
 
 Processes items from an input channel concurrently using the specified number of worker goroutines. Returns a channel of results. Note that the order of results is not guaranteed due to concurrent processing.
 
