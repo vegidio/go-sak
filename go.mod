@@ -4,10 +4,12 @@ go 1.25
 
 require (
 	github.com/browserutils/kooky v0.2.4
+	github.com/denisbrodbeck/machineid v1.0.1
 	github.com/dgraph-io/badger/v4 v4.8.0
 	github.com/dgraph-io/ristretto/v2 v2.2.0
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/google/go-github/v74 v74.0.0
+	github.com/google/uuid v1.6.0
 	github.com/otiai10/copy v1.14.1
 	github.com/samber/lo v1.51.0
 	github.com/sirupsen/logrus v1.9.3
@@ -15,7 +17,6 @@ require (
 	github.com/ulikunitz/xz v0.5.15
 	github.com/zeebo/blake3 v0.2.4
 	github.com/zeebo/xxh3 v1.0.2
-	go.opentelemetry.io/contrib/bridges/otellogrus v0.14.0
 	go.opentelemetry.io/otel v1.39.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.15.0
 	go.opentelemetry.io/otel/log v0.15.0
@@ -41,7 +42,6 @@ require (
 	github.com/gonuts/binary v0.2.0 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.3 // indirect
 	github.com/keybase/go-keychain v0.0.1 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
