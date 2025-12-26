@@ -86,6 +86,18 @@ Retrieves cookies for a specific domain from installed browsers on the system.
 
 Converts a slice of cookies into a properly formatted Cookie header string.
 
+#### `Request`
+
+Represents a download request containing the URL and file path for a download operation. Created via `NewRequest()`.
+
+#### `Response`
+
+Represents the state and result of a download operation. Contains status information, progress tracking, and download metadata.
+
+#### `Cookie`
+
+Represents an HTTP cookie with Name and Value fields. Used for cookie management in download requests.
+
 ---
 
 ### fs
@@ -180,9 +192,51 @@ Executes a memoized computation with the given key and TTL. Checks cache first, 
 
 Generates a SHA-256 hash key from the provided parts using gob encoding. Useful for creating consistent cache keys from multiple values.
 
+#### `CacheOpts`
+
+Configuration options for cache stores. Contains `MaxEntries` (maximum number of cached entries) and `MaxCapacity` (maximum capacity in bytes). Used when creating memory or disk-based memoizers.
+
 #### `Close() error`
 
 Closes the Memoizer and releases any resources held by the underlying store. Should be called when the Memoizer is no longer needed.
+
+---
+
+### o11y
+
+Observability utilities for logging with OpenTelemetry integration.
+
+#### `InitLogger(endpoint, serviceName string, environment OtelEnvironment, destination LogDestination) (func(), error)`
+
+Initializes the logging system with OpenTelemetry integration. Configures Logrus as the logging framework and optionally bridges logs to an OpenTelemetry collector via OTLP/HTTP. Returns a cleanup function that should be deferred to properly shutdown the logger provider.
+
+#### `LogDestination`
+
+Specifies where logs should be sent: `LogToNone`, `LogToTerminal`, `LogToOTel`, `LogToBoth`.
+
+#### `OtelEnvironment`
+
+Specifies the OpenTelemetry environment configuration: `EnvDevelopment`, `EnvProduction`.
+
+---
+
+### os
+
+Operating system utilities for environment management.
+
+#### `AppendEnvPath(path string)`
+
+Appends a directory path to the PATH environment variable. The path is added to the end of the existing PATH using the OS-specific path separator.
+
+---
+
+### string
+
+String manipulation utilities.
+
+#### `RightOf(s, sub string, useLast bool) string`
+
+Returns everything to the right of the first or last occurrence of a substring. Returns an empty string if the substring is not found. When `useLast` is true, uses the last occurrence; otherwise uses the first occurrence.
 
 ---
 
