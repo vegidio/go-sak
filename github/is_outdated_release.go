@@ -9,7 +9,7 @@ import (
 )
 
 // IsOutdatedRelease checks if a given version is outdated compared to the latest release of a GitHub repository. It
-// fetches the latest tag from the specified repository and performs semantic version comparison.
+// fetches the latest release from the specified repository and performs semantic version comparison.
 //
 // # Parameters:
 //   - owner: The owner (username or organization) of the GitHub repository
@@ -33,12 +33,12 @@ import (
 func IsOutdatedRelease(owner, repo, version string) bool {
 	client := github.NewClient(nil)
 
-	tags, _, err := client.Repositories.ListTags(context.Background(), owner, repo, nil)
-	if err != nil || len(tags) == 0 {
+	release, _, err := client.Repositories.GetLatestRelease(context.Background(), owner, repo)
+	if err != nil {
 		return false
 	}
 
-	latestVersion := tags[0].GetName()
+	latestVersion := release.GetName()
 	if latestVersion == "" {
 		return false
 	}
