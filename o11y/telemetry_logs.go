@@ -29,7 +29,6 @@ func (t *Telemetry) LogError(event string, fields map[string]any, err error) {
 // region - Private methods
 
 func (t *Telemetry) log(event string, fields map[string]any, severity log.Severity) {
-	ctx := context.Background()
 	var record log.Record
 
 	record.SetTimestamp(time.Now())
@@ -37,12 +36,12 @@ func (t *Telemetry) log(event string, fields map[string]any, severity log.Severi
 	record.SetBody(log.StringValue(event))
 	record.AddAttributes(t.mapToAttributes(fields)...)
 
-	t.logger.Emit(ctx, record)
+	t.logger.Emit(context.Background(), record)
 }
 
 func (t *Telemetry) mapToAttributes(fields map[string]any) []log.KeyValue {
-	attrs := make([]log.KeyValue, 0, len(fields))
 	m := lo.Assign(t.prefilled, fields)
+	attrs := make([]log.KeyValue, 0, len(m))
 
 	for k, v := range m {
 		switch val := v.(type) {

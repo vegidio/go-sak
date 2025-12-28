@@ -30,7 +30,7 @@ func NewTelemetry(
 
 	id, _ := machineid.ID()
 	fields["version"] = version
-	fields["group.id"] = uuid.New().String()
+	fields["session.id"] = uuid.New().String()
 
 	// Machine info
 	fields["machine.id"] = strings.ToLower(id)
@@ -52,6 +52,10 @@ func NewTelemetry(
 		prefilled: fields,
 		cleanup:   cleanup,
 	}
+}
+
+func (t *Telemetry) RenewSession() {
+	t.prefilled["session.id"] = uuid.New().String()
 }
 
 func (t *Telemetry) Close() {
