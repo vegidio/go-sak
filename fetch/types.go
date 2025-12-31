@@ -127,3 +127,11 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 
 	return n, nil
 }
+
+// Cookies
+
+// Cookie represents a key-value pair for a typical HTTP cookie.
+type Cookie struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}

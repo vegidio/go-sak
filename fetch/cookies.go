@@ -12,12 +12,6 @@ import (
 	"github.com/samber/lo"
 )
 
-// Cookie represents a key-value pair for a typical HTTP cookie.
-type Cookie struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
 func GetFileCookies(filePath string) ([]Cookie, error) {
 	cookies := make([]Cookie, 0)
 
