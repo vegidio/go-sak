@@ -19,7 +19,7 @@ func TestAppendEnvPath(t *testing.T) {
 		goos.Setenv("PATH", "/usr/bin:/bin")
 
 		// Append a new path
-		AppendEnvPath("/custom/path")
+		AppendEnvPath("PATH", "/custom/path")
 
 		// Verify the new PATH
 		newPath := goos.Getenv("PATH")
@@ -35,7 +35,7 @@ func TestAppendEnvPath(t *testing.T) {
 		goos.Setenv("PATH", "")
 
 		// Append a new path
-		AppendEnvPath("/new/path")
+		AppendEnvPath("PATH", "/new/path")
 
 		// Verify the new PATH
 		newPath := goos.Getenv("PATH")
@@ -51,9 +51,9 @@ func TestAppendEnvPath(t *testing.T) {
 		goos.Setenv("PATH", "/usr/bin")
 
 		// Append multiple paths
-		AppendEnvPath("/path1")
-		AppendEnvPath("/path2")
-		AppendEnvPath("/path3")
+		AppendEnvPath("PATH", "/path1")
+		AppendEnvPath("PATH", "/path2")
+		AppendEnvPath("PATH", "/path3")
 
 		// Verify all paths are appended
 		newPath := goos.Getenv("PATH")
@@ -69,7 +69,7 @@ func TestAppendEnvPath(t *testing.T) {
 		goos.Setenv("PATH", "/usr/bin")
 
 		// Append a path with spaces
-		AppendEnvPath("/path with spaces")
+		AppendEnvPath("PATH", "/path with spaces")
 
 		newPath := goos.Getenv("PATH")
 		expected := "/usr/bin" + string(goos.PathListSeparator) + "/path with spaces"
@@ -83,7 +83,7 @@ func TestAppendEnvPath(t *testing.T) {
 		goos.Setenv("PATH", "/usr/bin")
 
 		// Append empty string
-		AppendEnvPath("")
+		AppendEnvPath("PATH", "")
 
 		newPath := goos.Getenv("PATH")
 		expected := "/usr/bin" + string(goos.PathListSeparator)
@@ -96,7 +96,7 @@ func TestAppendEnvPath(t *testing.T) {
 
 		goos.Setenv("PATH", "/existing/path")
 
-		AppendEnvPath("/new/path")
+		AppendEnvPath("PATH", "/new/path")
 
 		newPath := goos.Getenv("PATH")
 		// Verify the separator is present
@@ -116,7 +116,7 @@ func TestAppendEnvPath(t *testing.T) {
 		goos.Setenv("PATH", "/usr/bin")
 
 		// Append a path with special characters
-		AppendEnvPath("/path-with_special.chars@123")
+		AppendEnvPath("PATH", "/path-with_special.chars@123")
 
 		newPath := goos.Getenv("PATH")
 		expected := "/usr/bin" + string(goos.PathListSeparator) + "/path-with_special.chars@123"
@@ -132,7 +132,7 @@ func TestAppendEnvPath(t *testing.T) {
 		existingPath := "/usr/bin" + sep + "/bin" + sep + "/usr/local/bin"
 		goos.Setenv("PATH", existingPath)
 
-		AppendEnvPath("/custom/bin")
+		AppendEnvPath("PATH", "/custom/bin")
 
 		newPath := goos.Getenv("PATH")
 		expected := existingPath + sep + "/custom/bin"
@@ -153,7 +153,7 @@ func TestAppendEnvPath(t *testing.T) {
 
 		// Create a very long path
 		longPath := "/" + strings.Repeat("a", 500)
-		AppendEnvPath(longPath)
+		AppendEnvPath("PATH", longPath)
 
 		newPath := goos.Getenv("PATH")
 		expected := "/usr/bin" + string(goos.PathListSeparator) + longPath
