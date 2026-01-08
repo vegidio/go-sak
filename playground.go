@@ -1,20 +1,33 @@
 package main
 
 import (
-	"time"
+	"fmt"
 
-	"github.com/vegidio/go-sak/async"
+	"github.com/vegidio/go-sak/sysinfo"
 )
 
 func main() {
-	array := []int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}
-
-	ch := async.SliceToChannel(array, 5, func(n int) int {
-		time.Sleep(1 * time.Second)
-		return n * 2
-	})
-
-	for result := range ch {
-		println(result)
+	cpu, err := sysinfo.GetCPUInfo()
+	if err != nil {
+		fmt.Println("Error getting CPU info", err)
+		return
 	}
+
+	fmt.Println("CPU", cpu)
+
+	memory, err := sysinfo.GetMemoryInfo()
+	if err != nil {
+		fmt.Println("Error getting memory info", err)
+		return
+	}
+
+	fmt.Println("Memory", memory)
+
+	gpu, err := sysinfo.GetGPUInfo()
+	if err != nil {
+		fmt.Println("Error getting GPU info", err)
+		return
+	}
+
+	fmt.Println("GPU", gpu)
 }
