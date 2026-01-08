@@ -39,7 +39,7 @@ func TestAppendEnvPath(t *testing.T) {
 
 		// Verify the new PATH
 		newPath := goos.Getenv("PATH")
-		expected := string(goos.PathListSeparator) + "/new/path"
+		expected := "/new/path"
 		assert.Equal(t, expected, newPath)
 	})
 

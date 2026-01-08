@@ -16,6 +16,19 @@ import goos "os"
 //
 //	AppendEnvPath("PATH", "/usr/local/bin")
 func AppendEnvPath(envvar string, path string) {
-	newEnvPath := goos.Getenv(envvar) + string(goos.PathListSeparator) + path
-	goos.Setenv(envvar, newEnvPath)
+	existingValue := goos.Getenv(envvar)
+
+	// If the variable is empty, just set it to the path without a separator
+	if existingValue == "" {
+		goos.Setenv(envvar, path)
+		return
+	}
+
+	// Check if the existing value already ends with a separator
+	separator := string(goos.PathListSeparator)
+	if len(existingValue) > 0 && existingValue[len(existingValue)-1:] == separator {
+		goos.Setenv(envvar, existingValue+path)
+	} else {
+		goos.Setenv(envvar, existingValue+separator+path)
+	}
 }
