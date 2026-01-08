@@ -10,13 +10,14 @@ import (
 )
 
 // Unzip extracts all files and directories from a ZIP archive to a target directory. It creates the target directory if
-// it doesn't exist and preserves the directory structure from the archive.
+// it doesn't exist and preserves the directory structure from the archive, including symbolic links.
 //
 // The function implements security measures to prevent Zip Slip attacks by:
 //   - Rejecting absolute paths in archive entries
 //   - Preventing path traversal attacks using ".." segments
 //   - Normalizing path separators to handle both forward slashes and backslashes
 //   - Validating that extracted files remain within the target directory
+//   - Validating that symbolic link targets remain within the target directory
 //
 // # Parameters:
 //   - zipPath: Path to the ZIP file to extract
@@ -28,7 +29,7 @@ import (
 //   - Any archive entry contains an illegal path (absolute or traversal)
 //   - File extraction fails due to I/O errors or permission issues
 //
-// All extracted files are set to executable mode (0755).
+// All extracted regular files are set to executable mode (0755).
 func Unzip(zipPath, targetDirectory string) error {
 	// Open the zip file specified by zipPath
 	r, err := zip.OpenReader(zipPath)
@@ -80,6 +81,43 @@ func Unzip(zipPath, targetDirectory string) error {
 		if f.FileInfo().IsDir() {
 			// Create a directory if it doesn't exist
 			if err = os.MkdirAll(fpath, f.Mode()); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Check if this is a symbolic link
+		if f.Mode()&os.ModeSymlink != 0 {
+			// Ensure the parent directory exists
+			if err = os.MkdirAll(filepath.Dir(fpath), 0755); err != nil {
+				return err
+			}
+
+			// Read the symlink target from the zip file
+			rc, fErr := f.Open()
+			if fErr != nil {
+				return fErr
+			}
+
+			linkTarget, fErr := io.ReadAll(rc)
+			rc.Close()
+			if fErr != nil {
+				return fErr
+			}
+
+			linkTargetStr := string(linkTarget)
+
+			// Security check: ensure symlink target doesn't escape the target directory
+			// We resolve both the symlink location and its target relative to targetDirectory
+			linkDir := filepath.Dir(fpath)
+			resolvedTarget := filepath.Join(linkDir, linkTargetStr)
+			rel, relErr := filepath.Rel(targetDirectory, resolvedTarget)
+			if relErr != nil || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || rel == ".." {
+				return fmt.Errorf("illegal symlink target: %s -> %s", f.Name, linkTargetStr)
+			}
+
+			// Create the symbolic link
+			if err = os.Symlink(linkTargetStr, fpath); err != nil {
 				return err
 			}
 			continue
