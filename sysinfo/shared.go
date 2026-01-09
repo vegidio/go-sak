@@ -1,10 +1,7 @@
 package sysinfo
 
 import (
-	"bytes"
 	"encoding/json"
-	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -12,23 +9,7 @@ import (
 const (
 	KiB = 1024
 	MiB = 1024 * KiB
-	GiB = 1024 * MiB
 )
-
-func run(name string, args ...string) ([]byte, error) {
-	cmd := exec.Command(name, args...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, fmt.Errorf("%s: %s", name, msg)
-	}
-	return out, nil
-}
 
 func anyToUint64(v any) (uint64, bool) {
 	switch t := v.(type) {
