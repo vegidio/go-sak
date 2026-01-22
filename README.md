@@ -32,13 +32,29 @@ Hash computation utilities supporting SHA-256 and XXH3 algorithms.
 
 Computes the SHA-256 hash of a byte slice and returns it as a hexadecimal string.
 
+#### `Sha256String(str string) (string, error)`
+
+Computes the SHA-256 hash of a string and returns it as a hexadecimal string.
+
+#### `Sha256Reader(reader io.Reader) (string, error)`
+
+Computes the SHA-256 hash of a reader and returns it as a lowercase hexadecimal string.
+
 #### `Sha256File(filePath string) (string, error)`
 
 Computes the SHA-256 hash of a file at the given path and returns it as a lowercase hexadecimal string.
 
-#### `Sha256String(str string) (string, error)`
+#### `Xxh3Bytes(bytes []byte) (string, error)`
 
-Computes the SHA-256 hash of a string and returns it as a hexadecimal string.
+Computes the XXH3 hash of a byte slice and returns it as a hexadecimal string. XXH3 is significantly faster than SHA-256.
+
+#### `Xxh3String(str string) (string, error)`
+
+Computes the XXH3 hash of a string and returns it as a hexadecimal string. XXH3 is significantly faster than SHA-256.
+
+#### `Xxh3Reader(reader io.Reader) (string, error)`
+
+Computes the XXH3 hash of a reader and returns it as a lowercase hexadecimal string. XXH3 is significantly faster than SHA-256.
 
 #### `Xxh3File(filePath string) (string, error)`
 

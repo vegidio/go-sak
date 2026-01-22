@@ -3,134 +3,240 @@ package crypto
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestSha256File(t *testing.T) {
-	// Create a temporary directory for test files
-	tempDir := t.TempDir()
-
-	t.Run("successful hash calculation for non-empty file", func(t *testing.T) {
-		// Create a test file with known content
-		testContent := "Hello, World!"
-		testFile := filepath.Join(tempDir, "test.txt")
-
-		err := os.WriteFile(testFile, []byte(testContent), 0644)
+func TestSha256Reader(t *testing.T) {
+	t.Run("successful hash of simple string", func(t *testing.T) {
+		reader := strings.NewReader("hello world")
+		hash, err := Sha256Reader(reader)
 		require.NoError(t, err)
-
-		// Calculate hash
-		hash, err := Sha256File(testFile)
-
-		// Assert no error and correct hash
-		assert.NoError(t, err)
-		// SHA-256 of "Hello, World!" is dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f
-		expected := "dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f"
-		assert.Equal(t, expected, hash)
-		assert.Len(t, hash, 64) // SHA-256 hash should be 64 hex characters
+		// Known SHA-256 hash of "hello world"
+		assert.Equal(t, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", hash)
 	})
 
-	t.Run("successful hash calculation for empty file", func(t *testing.T) {
-		// Create an empty test file
-		testFile := filepath.Join(tempDir, "empty.txt")
-
-		err := os.WriteFile(testFile, []byte(""), 0644)
+	t.Run("successful hash of empty string", func(t *testing.T) {
+		reader := strings.NewReader("")
+		hash, err := Sha256Reader(reader)
 		require.NoError(t, err)
+		// Known SHA-256 hash of empty string
+		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash)
+	})
 
-		// Calculate hash
-		hash, err := Sha256File(testFile)
+	t.Run("successful hash of multiline content", func(t *testing.T) {
+		content := "line1\nline2\nline3"
+		reader := strings.NewReader(content)
+		hash, err := Sha256Reader(reader)
+		require.NoError(t, err)
+		// Known SHA-256 hash of "line1\nline2\nline3"
+		assert.Equal(t, "6bb6a5ad9b9c43a7cb535e636578716b64ac42edea814a4cad102ba404946837", hash)
+		assert.Len(t, hash, 64) // SHA-256 produces 64 hex characters
+	})
 
-		// Assert no error and correct hash for an empty file
-		assert.NoError(t, err)
-		// SHA-256 of the empty string is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
-		expected := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-		assert.Equal(t, expected, hash)
+	t.Run("hash contains only lowercase hexadecimal characters", func(t *testing.T) {
+		reader := strings.NewReader("test content")
+		hash, err := Sha256Reader(reader)
+		require.NoError(t, err)
+		assert.Len(t, hash, 64)
+		assert.Regexp(t, "^[a-f0-9]{64}$", hash)
+	})
+
+	t.Run("successful hash of large content", func(t *testing.T) {
+		// Create a large string (1MB)
+		largeContent := strings.Repeat("a", 1024*1024)
+		reader := strings.NewReader(largeContent)
+		hash, err := Sha256Reader(reader)
+		require.NoError(t, err)
+		assert.Len(t, hash, 64)
+		assert.NotEmpty(t, hash)
+	})
+
+	t.Run("successful hash of binary-like content", func(t *testing.T) {
+		content := "\x00\x01\x02\x03\xff\xfe\xfd"
+		reader := strings.NewReader(content)
+		hash, err := Sha256Reader(reader)
+		require.NoError(t, err)
 		assert.Len(t, hash, 64)
 	})
 
-	t.Run("successful hash calculation for large file", func(t *testing.T) {
-		// Create a larger test file
-		testContent := make([]byte, 10000)
-		for i := range testContent {
-			testContent[i] = byte(i % 256)
-		}
-		testFile := filepath.Join(tempDir, "large.bin")
+	t.Run("same content produces same hash", func(t *testing.T) {
+		content := "deterministic test"
 
-		err := os.WriteFile(testFile, testContent, 0644)
-		require.NoError(t, err)
+		reader1 := strings.NewReader(content)
+		hash1, err1 := Sha256Reader(reader1)
+		require.NoError(t, err1)
 
-		// Calculate hash
-		hash, err := Sha256File(testFile)
+		reader2 := strings.NewReader(content)
+		hash2, err2 := Sha256Reader(reader2)
+		require.NoError(t, err2)
 
-		// Assert no error and valid hash format
-		assert.NoError(t, err)
-		assert.Len(t, hash, 64)
-		assert.Regexp(t, "^[a-f0-9]+$", hash) // Should be lowercase hex
-	})
-
-	t.Run("file does not exist", func(t *testing.T) {
-		nonExistentFile := filepath.Join(tempDir, "does_not_exist.txt")
-
-		hash, err := Sha256File(nonExistentFile)
-
-		// Assert error occurred and empty hash returned
-		assert.Error(t, err)
-		assert.Empty(t, hash)
-		assert.Contains(t, err.Error(), "no such file or directory")
-	})
-
-	t.Run("file path is empty", func(t *testing.T) {
-		hash, err := Sha256File("")
-
-		// Assert error occurred and empty hash returned
-		assert.Error(t, err)
-		assert.Empty(t, hash)
-	})
-
-	t.Run("file path is directory", func(t *testing.T) {
-		hash, err := Sha256File(tempDir)
-
-		// Assert error occurred and empty hash returned
-		assert.Error(t, err)
-		assert.Empty(t, hash)
-	})
-
-	t.Run("hash format is lowercase hexadecimal", func(t *testing.T) {
-		// Create a test file
-		testContent := "test content for format validation"
-		testFile := filepath.Join(tempDir, "format_test.txt")
-
-		err := os.WriteFile(testFile, []byte(testContent), 0644)
-		require.NoError(t, err)
-
-		// Calculate hash
-		hash, err := Sha256File(testFile)
-
-		// Assert no error and correct format
-		assert.NoError(t, err)
-		assert.Regexp(t, "^[a-f0-9]{64}$", hash) // Should be exactly 64 lowercase hex characters
-	})
-
-	t.Run("consistent results for same file", func(t *testing.T) {
-		// Create a test file
-		testContent := "consistency test"
-		testFile := filepath.Join(tempDir, "consistency.txt")
-
-		err := os.WriteFile(testFile, []byte(testContent), 0644)
-		require.NoError(t, err)
-
-		// Calculate hash multiple times
-		hash1, err1 := Sha256File(testFile)
-		hash2, err2 := Sha256File(testFile)
-		hash3, err3 := Sha256File(testFile)
-
-		// Assert all calls succeed and return the same result
-		assert.NoError(t, err1)
-		assert.NoError(t, err2)
-		assert.NoError(t, err3)
 		assert.Equal(t, hash1, hash2)
-		assert.Equal(t, hash2, hash3)
 	})
+
+	t.Run("different content produces different hash", func(t *testing.T) {
+		reader1 := strings.NewReader("content1")
+		hash1, err1 := Sha256Reader(reader1)
+		require.NoError(t, err1)
+
+		reader2 := strings.NewReader("content2")
+		hash2, err2 := Sha256Reader(reader2)
+		require.NoError(t, err2)
+
+		assert.NotEqual(t, hash1, hash2)
+	})
+}
+
+func TestSha256File(t *testing.T) {
+	t.Run("successful hash of file with content", func(t *testing.T) {
+		tempFile := createTempFile(t, "hello world")
+		defer os.Remove(tempFile)
+
+		hash, err := Sha256File(tempFile)
+		require.NoError(t, err)
+		// Known SHA-256 hash of "hello world"
+		assert.Equal(t, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", hash)
+	})
+
+	t.Run("successful hash of empty file", func(t *testing.T) {
+		tempFile := createTempFile(t, "")
+		defer os.Remove(tempFile)
+
+		hash, err := Sha256File(tempFile)
+		require.NoError(t, err)
+		// Known SHA-256 hash of empty string
+		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash)
+	})
+
+	t.Run("error when file does not exist", func(t *testing.T) {
+		hash, err := Sha256File("/nonexistent/path/to/file.txt")
+		assert.Error(t, err)
+		assert.Empty(t, hash)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("error when path is a directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		hash, err := Sha256File(tempDir)
+		assert.Error(t, err)
+		assert.Empty(t, hash)
+	})
+
+	t.Run("successful hash of file with multiline content", func(t *testing.T) {
+		content := "line1\nline2\nline3\n"
+		tempFile := createTempFile(t, content)
+		defer os.Remove(tempFile)
+
+		hash, err := Sha256File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 64)
+		assert.NotEmpty(t, hash)
+	})
+
+	t.Run("successful hash of large file", func(t *testing.T) {
+		// Create a large file (1MB)
+		largeContent := strings.Repeat("test", 256*1024)
+		tempFile := createTempFile(t, largeContent)
+		defer os.Remove(tempFile)
+
+		hash, err := Sha256File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 64)
+	})
+
+	t.Run("same file content produces same hash", func(t *testing.T) {
+		content := "consistent content"
+
+		tempFile1 := createTempFile(t, content)
+		defer os.Remove(tempFile1)
+
+		tempFile2 := createTempFile(t, content)
+		defer os.Remove(tempFile2)
+
+		hash1, err1 := Sha256File(tempFile1)
+		require.NoError(t, err1)
+
+		hash2, err2 := Sha256File(tempFile2)
+		require.NoError(t, err2)
+
+		assert.Equal(t, hash1, hash2)
+	})
+
+	t.Run("different file content produces different hash", func(t *testing.T) {
+		tempFile1 := createTempFile(t, "content1")
+		defer os.Remove(tempFile1)
+
+		tempFile2 := createTempFile(t, "content2")
+		defer os.Remove(tempFile2)
+
+		hash1, err1 := Sha256File(tempFile1)
+		require.NoError(t, err1)
+
+		hash2, err2 := Sha256File(tempFile2)
+		require.NoError(t, err2)
+
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("successful hash of file with special characters", func(t *testing.T) {
+		content := "Special: é, ñ, 中文, 🎉"
+		tempFile := createTempFile(t, content)
+		defer os.Remove(tempFile)
+
+		hash, err := Sha256File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 64)
+	})
+
+	t.Run("successful hash of file with binary content", func(t *testing.T) {
+		content := "\x00\x01\x02\x03\xff\xfe\xfd\xfc"
+		tempFile := createTempFile(t, content)
+		defer os.Remove(tempFile)
+
+		hash, err := Sha256File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 64)
+	})
+
+	t.Run("error with invalid path characters", func(t *testing.T) {
+		hash, err := Sha256File("\x00invalid")
+		assert.Error(t, err)
+		assert.Empty(t, hash)
+	})
+}
+
+func TestSha256Reader_Sha256File_Consistency(t *testing.T) {
+	t.Run("reader and file produce same hash for same content", func(t *testing.T) {
+		content := "consistency test content"
+
+		// Hash via reader
+		reader := strings.NewReader(content)
+		readerHash, err := Sha256Reader(reader)
+		require.NoError(t, err)
+
+		// Hash via file
+		tempFile := createTempFile(t, content)
+		defer os.Remove(tempFile)
+		fileHash, err := Sha256File(tempFile)
+		require.NoError(t, err)
+
+		assert.Equal(t, readerHash, fileHash)
+	})
+}
+
+// createTempFile creates a temporary file with the given content and returns its path
+func createTempFile(t *testing.T, content string) string {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	tempFile := filepath.Join(tempDir, "testfile.txt")
+
+	err := os.WriteFile(tempFile, []byte(content), 0644)
+	require.NoError(t, err)
+
+	return tempFile
 }

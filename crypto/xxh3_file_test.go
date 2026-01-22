@@ -3,134 +3,239 @@ package crypto
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestXxh3File(t *testing.T) {
-	// Create a temporary directory for test files
-	tempDir := t.TempDir()
-
-	t.Run("successful hash calculation for non-empty file", func(t *testing.T) {
-		// Create a test file with known content
-		testContent := "Hello, World!"
-		testFile := filepath.Join(tempDir, "test.txt")
-
-		err := os.WriteFile(testFile, []byte(testContent), 0644)
+func TestXxh3Reader(t *testing.T) {
+	t.Run("successful hash of simple string", func(t *testing.T) {
+		reader := strings.NewReader("hello world")
+		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
-
-		// Calculate hash
-		hash, err := Xxh3File(testFile)
-
-		// Assert no error and correct hash
-		assert.NoError(t, err)
-		// XXH3 of "Hello, World!" is 60415d5f616602aa
-		expected := "60415d5f616602aa"
-		assert.Equal(t, expected, hash)
-		assert.Len(t, hash, 16) // XXH3 hash should be 16 hex characters
+		// Known XXH3 hash of "hello world"
+		assert.Equal(t, "d447b1ea40e6988b", hash)
 	})
 
-	t.Run("successful hash calculation for empty file", func(t *testing.T) {
-		// Create an empty test file
-		testFile := filepath.Join(tempDir, "empty.txt")
-
-		err := os.WriteFile(testFile, []byte(""), 0644)
+	t.Run("successful hash of empty string", func(t *testing.T) {
+		reader := strings.NewReader("")
+		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
+		// Known XXH3 hash of empty string
+		assert.Equal(t, "2d06800538d394c2", hash)
+	})
 
-		// Calculate hash
-		hash, err := Xxh3File(testFile)
+	t.Run("successful hash of multiline content", func(t *testing.T) {
+		content := "line1\nline2\nline3"
+		reader := strings.NewReader(content)
+		hash, err := Xxh3Reader(reader)
+		require.NoError(t, err)
+		assert.Len(t, hash, 16) // XXH3 produces 16 hex characters
+		assert.NotEmpty(t, hash)
+	})
 
-		// Assert no error and correct hash for an empty file
-		assert.NoError(t, err)
-		// XXH3 of the empty string is 2d06800538d394c2
-		expected := "2d06800538d394c2"
-		assert.Equal(t, expected, hash)
+	t.Run("hash contains only lowercase hexadecimal characters", func(t *testing.T) {
+		reader := strings.NewReader("test content")
+		hash, err := Xxh3Reader(reader)
+		require.NoError(t, err)
+		assert.Len(t, hash, 16)
+		assert.Regexp(t, "^[a-f0-9]{16}$", hash)
+	})
+
+	t.Run("successful hash of large content", func(t *testing.T) {
+		// Create a large string (1MB)
+		largeContent := strings.Repeat("a", 1024*1024)
+		reader := strings.NewReader(largeContent)
+		hash, err := Xxh3Reader(reader)
+		require.NoError(t, err)
+		assert.Len(t, hash, 16)
+		assert.NotEmpty(t, hash)
+	})
+
+	t.Run("successful hash of binary-like content", func(t *testing.T) {
+		content := "\x00\x01\x02\x03\xff\xfe\xfd"
+		reader := strings.NewReader(content)
+		hash, err := Xxh3Reader(reader)
+		require.NoError(t, err)
 		assert.Len(t, hash, 16)
 	})
 
-	t.Run("successful hash calculation for large file", func(t *testing.T) {
-		// Create a larger test file
-		testContent := make([]byte, 10000)
-		for i := range testContent {
-			testContent[i] = byte(i % 256)
-		}
-		testFile := filepath.Join(tempDir, "large.bin")
+	t.Run("same content produces same hash", func(t *testing.T) {
+		content := "deterministic test"
 
-		err := os.WriteFile(testFile, testContent, 0644)
-		require.NoError(t, err)
+		reader1 := strings.NewReader(content)
+		hash1, err1 := Xxh3Reader(reader1)
+		require.NoError(t, err1)
 
-		// Calculate hash
-		hash, err := Xxh3File(testFile)
+		reader2 := strings.NewReader(content)
+		hash2, err2 := Xxh3Reader(reader2)
+		require.NoError(t, err2)
 
-		// Assert no error and valid hash format
-		assert.NoError(t, err)
-		assert.Len(t, hash, 16)
-		assert.Regexp(t, "^[a-f0-9]+$", hash) // Should be lowercase hex
-	})
-
-	t.Run("file does not exist", func(t *testing.T) {
-		nonExistentFile := filepath.Join(tempDir, "does_not_exist.txt")
-
-		hash, err := Xxh3File(nonExistentFile)
-
-		// Assert error occurred and empty hash returned
-		assert.Error(t, err)
-		assert.Empty(t, hash)
-		assert.Contains(t, err.Error(), "no such file or directory")
-	})
-
-	t.Run("file path is empty", func(t *testing.T) {
-		hash, err := Xxh3File("")
-
-		// Assert error occurred and empty hash returned
-		assert.Error(t, err)
-		assert.Empty(t, hash)
-	})
-
-	t.Run("file path is directory", func(t *testing.T) {
-		hash, err := Xxh3File(tempDir)
-
-		// Assert error occurred and empty hash returned
-		assert.Error(t, err)
-		assert.Empty(t, hash)
-	})
-
-	t.Run("hash format is lowercase hexadecimal", func(t *testing.T) {
-		// Create a test file
-		testContent := "test content for format validation"
-		testFile := filepath.Join(tempDir, "format_test.txt")
-
-		err := os.WriteFile(testFile, []byte(testContent), 0644)
-		require.NoError(t, err)
-
-		// Calculate hash
-		hash, err := Xxh3File(testFile)
-
-		// Assert no error and correct format
-		assert.NoError(t, err)
-		assert.Regexp(t, "^[a-f0-9]{16}$", hash) // Should be exactly 16 lowercase hex characters
-	})
-
-	t.Run("consistent results for same file", func(t *testing.T) {
-		// Create a test file
-		testContent := "consistency test"
-		testFile := filepath.Join(tempDir, "consistency.txt")
-
-		err := os.WriteFile(testFile, []byte(testContent), 0644)
-		require.NoError(t, err)
-
-		// Calculate hash multiple times
-		hash1, err1 := Xxh3File(testFile)
-		hash2, err2 := Xxh3File(testFile)
-		hash3, err3 := Xxh3File(testFile)
-
-		// Assert all calls succeed and return the same result
-		assert.NoError(t, err1)
-		assert.NoError(t, err2)
-		assert.NoError(t, err3)
 		assert.Equal(t, hash1, hash2)
-		assert.Equal(t, hash2, hash3)
 	})
+
+	t.Run("different content produces different hash", func(t *testing.T) {
+		reader1 := strings.NewReader("content1")
+		hash1, err1 := Xxh3Reader(reader1)
+		require.NoError(t, err1)
+
+		reader2 := strings.NewReader("content2")
+		hash2, err2 := Xxh3Reader(reader2)
+		require.NoError(t, err2)
+
+		assert.NotEqual(t, hash1, hash2)
+	})
+}
+
+func TestXxh3File(t *testing.T) {
+	t.Run("successful hash of file with content", func(t *testing.T) {
+		tempFile := createTempFileXxh3(t, "hello world")
+		defer os.Remove(tempFile)
+
+		hash, err := Xxh3File(tempFile)
+		require.NoError(t, err)
+		// Known XXH3 hash of "hello world"
+		assert.Equal(t, "d447b1ea40e6988b", hash)
+	})
+
+	t.Run("successful hash of empty file", func(t *testing.T) {
+		tempFile := createTempFileXxh3(t, "")
+		defer os.Remove(tempFile)
+
+		hash, err := Xxh3File(tempFile)
+		require.NoError(t, err)
+		// Known XXH3 hash of empty string
+		assert.Equal(t, "2d06800538d394c2", hash)
+	})
+
+	t.Run("error when file does not exist", func(t *testing.T) {
+		hash, err := Xxh3File("/nonexistent/path/to/file.txt")
+		assert.Error(t, err)
+		assert.Empty(t, hash)
+		assert.True(t, os.IsNotExist(err))
+	})
+
+	t.Run("error when path is a directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		hash, err := Xxh3File(tempDir)
+		assert.Error(t, err)
+		assert.Empty(t, hash)
+	})
+
+	t.Run("successful hash of file with multiline content", func(t *testing.T) {
+		content := "line1\nline2\nline3\n"
+		tempFile := createTempFileXxh3(t, content)
+		defer os.Remove(tempFile)
+
+		hash, err := Xxh3File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 16)
+		assert.NotEmpty(t, hash)
+	})
+
+	t.Run("successful hash of large file", func(t *testing.T) {
+		// Create a large file (1MB)
+		largeContent := strings.Repeat("test", 256*1024)
+		tempFile := createTempFileXxh3(t, largeContent)
+		defer os.Remove(tempFile)
+
+		hash, err := Xxh3File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 16)
+	})
+
+	t.Run("same file content produces same hash", func(t *testing.T) {
+		content := "consistent content"
+
+		tempFile1 := createTempFileXxh3(t, content)
+		defer os.Remove(tempFile1)
+
+		tempFile2 := createTempFileXxh3(t, content)
+		defer os.Remove(tempFile2)
+
+		hash1, err1 := Xxh3File(tempFile1)
+		require.NoError(t, err1)
+
+		hash2, err2 := Xxh3File(tempFile2)
+		require.NoError(t, err2)
+
+		assert.Equal(t, hash1, hash2)
+	})
+
+	t.Run("different file content produces different hash", func(t *testing.T) {
+		tempFile1 := createTempFileXxh3(t, "content1")
+		defer os.Remove(tempFile1)
+
+		tempFile2 := createTempFileXxh3(t, "content2")
+		defer os.Remove(tempFile2)
+
+		hash1, err1 := Xxh3File(tempFile1)
+		require.NoError(t, err1)
+
+		hash2, err2 := Xxh3File(tempFile2)
+		require.NoError(t, err2)
+
+		assert.NotEqual(t, hash1, hash2)
+	})
+
+	t.Run("successful hash of file with special characters", func(t *testing.T) {
+		content := "Special: é, ñ, 中文, 🎉"
+		tempFile := createTempFileXxh3(t, content)
+		defer os.Remove(tempFile)
+
+		hash, err := Xxh3File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 16)
+	})
+
+	t.Run("successful hash of file with binary content", func(t *testing.T) {
+		content := "\x00\x01\x02\x03\xff\xfe\xfd\xfc"
+		tempFile := createTempFileXxh3(t, content)
+		defer os.Remove(tempFile)
+
+		hash, err := Xxh3File(tempFile)
+		require.NoError(t, err)
+		assert.Len(t, hash, 16)
+	})
+
+	t.Run("error with invalid path characters", func(t *testing.T) {
+		hash, err := Xxh3File("\x00invalid")
+		assert.Error(t, err)
+		assert.Empty(t, hash)
+	})
+}
+
+func TestXxh3Reader_Xxh3File_Consistency(t *testing.T) {
+	t.Run("reader and file produce same hash for same content", func(t *testing.T) {
+		content := "consistency test content"
+
+		// Hash via reader
+		reader := strings.NewReader(content)
+		readerHash, err := Xxh3Reader(reader)
+		require.NoError(t, err)
+
+		// Hash via file
+		tempFile := createTempFileXxh3(t, content)
+		defer os.Remove(tempFile)
+		fileHash, err := Xxh3File(tempFile)
+		require.NoError(t, err)
+
+		assert.Equal(t, readerHash, fileHash)
+	})
+}
+
+// createTempFileXxh3 creates a temporary file with the given content and returns its path
+func createTempFileXxh3(t *testing.T, content string) string {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	tempFile := filepath.Join(tempDir, "testfile.txt")
+
+	err := os.WriteFile(tempFile, []byte(content), 0644)
+	require.NoError(t, err)
+
+	return tempFile
 }

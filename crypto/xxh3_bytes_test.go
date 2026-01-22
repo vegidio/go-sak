@@ -8,157 +8,159 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSha256Bytes(t *testing.T) {
+func TestXxh3Bytes(t *testing.T) {
 	t.Run("empty byte slice", func(t *testing.T) {
-		hash, err := Sha256Bytes([]byte{})
+		hash, err := Xxh3Bytes([]byte{})
 		require.NoError(t, err)
-		// SHA-256 of empty input
-		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash)
+		// XXH3 of empty input
+		assert.Equal(t, "2d06800538d394c2", hash)
 	})
 
 	t.Run("simple text", func(t *testing.T) {
-		hash, err := Sha256Bytes([]byte("hello world"))
+		hash, err := Xxh3Bytes([]byte("hello world"))
 		require.NoError(t, err)
-		assert.Equal(t, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", hash)
+		assert.Equal(t, "d447b1ea40e6988b", hash)
 	})
 
 	t.Run("single character", func(t *testing.T) {
-		hash, err := Sha256Bytes([]byte("a"))
+		hash, err := Xxh3Bytes([]byte("a"))
 		require.NoError(t, err)
-		assert.Equal(t, "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb", hash)
+		assert.Equal(t, "e6c632b61e964e1f", hash)
 	})
 
 	t.Run("binary data", func(t *testing.T) {
-		hash, err := Sha256Bytes([]byte{0x00, 0x01, 0x02, 0x03, 0xFF})
+		hash, err := Xxh3Bytes([]byte{0x00, 0x01, 0x02, 0x03, 0xFF})
 		require.NoError(t, err)
-		assert.Equal(t, "ff5d8507b6a72bee2debce2c0054798deaccdc5d8a1b945b6280ce8aa9cba52e", hash)
+		assert.Len(t, hash, 16) // XXH3 produces 16 hex characters
+		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("text with special characters", func(t *testing.T) {
-		hash, err := Sha256Bytes([]byte("Hello, 世界! 🌍"))
+		hash, err := Xxh3Bytes([]byte("Hello, 世界! 🌍"))
 		require.NoError(t, err)
-		assert.Equal(t, "4c5bbf8d24e5546714002205ec5658b5aebb19cf16a7029287daf72dfb71e901", hash)
 		// Verify hash is valid hexadecimal and correct length
-		assert.Len(t, hash, 64) // SHA-256 produces 64 hex characters
+		assert.Len(t, hash, 16) // XXH3 produces 16 hex characters
+		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("long input", func(t *testing.T) {
 		longBytes := []byte(strings.Repeat("a", 10000))
-		hash, err := Sha256Bytes(longBytes)
+		hash, err := Xxh3Bytes(longBytes)
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("newline characters", func(t *testing.T) {
-		hash, err := Sha256Bytes([]byte("line1\nline2\r\nline3"))
+		hash, err := Xxh3Bytes([]byte("line1\nline2\r\nline3"))
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("nil byte slice", func(t *testing.T) {
-		hash, err := Sha256Bytes(nil)
+		hash, err := Xxh3Bytes(nil)
 		require.NoError(t, err)
 		// nil slice is treated same as empty slice
-		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash)
+		assert.Equal(t, "2d06800538d394c2", hash)
 	})
 
 	t.Run("numeric bytes", func(t *testing.T) {
-		hash, err := Sha256Bytes([]byte("123456"))
+		hash, err := Xxh3Bytes([]byte("123456"))
 		require.NoError(t, err)
-		assert.Equal(t, "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92", hash)
+		assert.Len(t, hash, 16)
+		assert.NotEmpty(t, hash)
 	})
 }
 
-func TestSha256String(t *testing.T) {
+func TestXxh3String(t *testing.T) {
 	t.Run("empty string", func(t *testing.T) {
-		hash, err := Sha256String("")
+		hash, err := Xxh3String("")
 		require.NoError(t, err)
-		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", hash)
+		assert.Equal(t, "2d06800538d394c2", hash)
 	})
 
 	t.Run("hello world example from docs", func(t *testing.T) {
-		hash, err := Sha256String("hello world")
+		hash, err := Xxh3String("hello world")
 		require.NoError(t, err)
-		assert.Equal(t, "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9", hash)
+		assert.Equal(t, "d447b1ea40e6988b", hash)
 	})
 
 	t.Run("single character string", func(t *testing.T) {
-		hash, err := Sha256String("a")
+		hash, err := Xxh3String("a")
 		require.NoError(t, err)
-		assert.Equal(t, "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb", hash)
+		assert.Equal(t, "e6c632b61e964e1f", hash)
 	})
 
 	t.Run("string with spaces", func(t *testing.T) {
-		hash, err := Sha256String("hello world with spaces")
+		hash, err := Xxh3String("hello world with spaces")
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("unicode string", func(t *testing.T) {
-		hash, err := Sha256String("你好世界")
+		hash, err := Xxh3String("你好世界")
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("string with emoji", func(t *testing.T) {
-		hash, err := Sha256String("Hello 👋 World 🌍")
+		hash, err := Xxh3String("Hello 👋 World 🌍")
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("very long string", func(t *testing.T) {
 		longString := strings.Repeat("test", 10000)
-		hash, err := Sha256String(longString)
+		hash, err := Xxh3String(longString)
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("string with special characters", func(t *testing.T) {
-		hash, err := Sha256String("!@#$%^&*()_+-=[]{}|;':\",./<>?")
+		hash, err := Xxh3String("!@#$%^&*()_+-=[]{}|;':\",./<>?")
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
 	t.Run("numeric string", func(t *testing.T) {
-		hash, err := Sha256String("1234567890")
+		hash, err := Xxh3String("1234567890")
 		require.NoError(t, err)
-		assert.Len(t, hash, 64)
+		assert.Len(t, hash, 16)
 		assert.NotEmpty(t, hash)
 	})
 
-	t.Run("consistency between Sha256String and Sha256Bytes", func(t *testing.T) {
+	t.Run("consistency between Xxh3String and Xxh3Bytes", func(t *testing.T) {
 		testInput := "consistency test"
 
-		hashFromString, err1 := Sha256String(testInput)
+		hashFromString, err1 := Xxh3String(testInput)
 		require.NoError(t, err1)
 
-		hashFromBytes, err2 := Sha256Bytes([]byte(testInput))
+		hashFromBytes, err2 := Xxh3Bytes([]byte(testInput))
 		require.NoError(t, err2)
 
 		assert.Equal(t, hashFromString, hashFromBytes)
 	})
 }
 
-func TestSha256EdgeCases(t *testing.T) {
-	t.Run("hash output is always 64 characters", func(t *testing.T) {
+func TestXxh3EdgeCases(t *testing.T) {
+	t.Run("hash output is always 16 characters", func(t *testing.T) {
 		testCases := []string{"", "a", "short", strings.Repeat("long", 1000)}
 
 		for _, tc := range testCases {
-			hash, err := Sha256String(tc)
+			hash, err := Xxh3String(tc)
 			require.NoError(t, err)
-			assert.Len(t, hash, 64, "hash length should always be 64 for input: %q", tc)
+			assert.Len(t, hash, 16, "hash length should always be 16 for input: %q", tc)
 		}
 	})
 
 	t.Run("hash output is always lowercase hexadecimal", func(t *testing.T) {
-		hash, err := Sha256String("test")
+		hash, err := Xxh3String("test")
 		require.NoError(t, err)
 
 		for _, char := range hash {
@@ -169,10 +171,10 @@ func TestSha256EdgeCases(t *testing.T) {
 	})
 
 	t.Run("different inputs produce different hashes", func(t *testing.T) {
-		hash1, err1 := Sha256String("test1")
+		hash1, err1 := Xxh3String("test1")
 		require.NoError(t, err1)
 
-		hash2, err2 := Sha256String("test2")
+		hash2, err2 := Xxh3String("test2")
 		require.NoError(t, err2)
 
 		assert.NotEqual(t, hash1, hash2)
@@ -181,10 +183,10 @@ func TestSha256EdgeCases(t *testing.T) {
 	t.Run("same input produces same hash", func(t *testing.T) {
 		input := "deterministic test"
 
-		hash1, err1 := Sha256String(input)
+		hash1, err1 := Xxh3String(input)
 		require.NoError(t, err1)
 
-		hash2, err2 := Sha256String(input)
+		hash2, err2 := Xxh3String(input)
 		require.NoError(t, err2)
 
 		assert.Equal(t, hash1, hash2)
