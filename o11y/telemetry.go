@@ -2,6 +2,7 @@ package o11y
 
 import (
 	"context"
+	"net/url"
 	"runtime"
 	"strings"
 
@@ -18,11 +19,12 @@ import (
 type Telemetry struct {
 	logger    log.Logger
 	prefilled map[string]any
-	cleanup   func()
+	cleanup   func() error
 }
 
 func NewTelemetry(
 	endpoint, serviceName, version string,
+	headers map[string]string,
 	environment OtelEnvironment,
 	enabled bool,
 ) *Telemetry {
@@ -44,8 +46,8 @@ func NewTelemetry(
 		fields["location.city"] = geo.City
 	}
 
+	cleanup, _ := initLogger(endpoint, serviceName, headers, environment, enabled)
 	logger := global.GetLoggerProvider().Logger(serviceName)
-	cleanup, _ := initLogger(endpoint, serviceName, environment, enabled)
 
 	return &Telemetry{
 		logger:    logger,
@@ -58,29 +60,36 @@ func (t *Telemetry) RenewSession() {
 	t.prefilled["session.id"] = uuid.New().String()
 }
 
-func (t *Telemetry) Close() {
-	t.cleanup()
+func (t *Telemetry) Close() error {
+	return t.cleanup()
 }
 
 // region - Private functions
 
 func initLogger(
 	endpoint, serviceName string,
+	headers map[string]string,
 	environment OtelEnvironment,
 	enabled bool,
-) (func(), error) {
+) (func() error, error) {
 	if !enabled {
-		return func() {}, nil
+		return func() error { return nil }, nil
 	}
 
 	ctx := context.Background()
 
+	parsedURL, err := url.Parse(endpoint)
+	if err != nil {
+		return func() error { return nil }, err
+	}
+
 	exp, err := otlploghttp.New(ctx,
-		otlploghttp.WithEndpoint(endpoint),
-		otlploghttp.WithInsecure(),
+		otlploghttp.WithEndpoint(parsedURL.Host),
+		otlploghttp.WithURLPath(parsedURL.Path+"/v1/logs"),
+		otlploghttp.WithHeaders(headers),
 	)
 	if err != nil {
-		return func() {}, err
+		return func() error { return nil }, err
 	}
 
 	res, err := resource.New(ctx,
@@ -100,7 +109,9 @@ func initLogger(
 
 	global.SetLoggerProvider(lp)
 
-	return func() { _ = lp.Shutdown(context.Background()) }, nil
+	return func() error {
+		return lp.Shutdown(context.Background())
+	}, nil
 }
 
 // endregion

@@ -15,6 +15,7 @@ func TestNewTelemetry(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			true,
 		)
@@ -31,6 +32,7 @@ func TestNewTelemetry(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvProduction,
 			false,
 		)
@@ -48,6 +50,7 @@ func TestNewTelemetry(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			version,
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -61,6 +64,7 @@ func TestNewTelemetry(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -81,6 +85,7 @@ func TestNewTelemetry(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -112,6 +117,7 @@ func TestNewTelemetry(t *testing.T) {
 				"localhost:4318",
 				"test-service",
 				"1.0.0",
+				nil,
 				env,
 				false,
 			)
@@ -125,6 +131,7 @@ func TestNewTelemetry(t *testing.T) {
 			"localhost:4318",
 			"",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -137,6 +144,7 @@ func TestNewTelemetry(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -151,6 +159,7 @@ func TestNewTelemetry(t *testing.T) {
 			"",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -165,6 +174,7 @@ func TestRenewSession(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -185,6 +195,7 @@ func TestRenewSession(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -203,6 +214,7 @@ func TestRenewSession(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -226,6 +238,7 @@ func TestRenewSession(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -249,6 +262,7 @@ func TestClose(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			true,
 		)
@@ -265,6 +279,7 @@ func TestClose(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -280,6 +295,7 @@ func TestClose(t *testing.T) {
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -298,6 +314,7 @@ func TestInitLogger(t *testing.T) {
 		cleanup, err := initLogger(
 			"localhost:4318",
 			"test-service",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -313,6 +330,7 @@ func TestInitLogger(t *testing.T) {
 		cleanup, err := initLogger(
 			"",
 			"test-service",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -325,6 +343,7 @@ func TestInitLogger(t *testing.T) {
 		cleanup, err := initLogger(
 			"localhost:4318",
 			"",
+			nil,
 			EnvDevelopment,
 			false,
 		)
@@ -343,6 +362,7 @@ func TestInitLogger(t *testing.T) {
 			cleanup, err := initLogger(
 				"localhost:4318",
 				"test-service",
+				nil,
 				env,
 				false,
 			)
@@ -359,6 +379,7 @@ func TestTelemetryIntegration(t *testing.T) {
 			"localhost:4318",
 			"integration-test",
 			"1.0.0",
+			nil,
 			EnvDevelopment,
 			false,
 		)
