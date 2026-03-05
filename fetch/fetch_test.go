@@ -13,7 +13,7 @@ import (
 
 func TestNew(t *testing.T) {
 	t.Run("with nil headers", func(t *testing.T) {
-		f := New(nil, 3)
+		f := New(nil, 3, false)
 
 		assert.NotNil(t, f)
 		assert.NotNil(t, f.restClient)
@@ -25,7 +25,7 @@ func TestNew(t *testing.T) {
 
 	t.Run("with empty headers", func(t *testing.T) {
 		headers := make(map[string]string)
-		f := New(headers, 2)
+		f := New(headers, 2, false)
 
 		assert.NotNil(t, f)
 		assert.Equal(t, 2, f.retries)
@@ -37,7 +37,7 @@ func TestNew(t *testing.T) {
 			"Authorization": "Bearer token",
 			"Content-Type":  "application/json",
 		}
-		f := New(headers, 1)
+		f := New(headers, 1, false)
 
 		assert.NotNil(t, f)
 		assert.Equal(t, 1, f.retries)
@@ -51,7 +51,7 @@ func TestNew(t *testing.T) {
 		headers := map[string]string{
 			"User-Agent": customUA,
 		}
-		f := New(headers, 0)
+		f := New(headers, 0, false)
 
 		assert.NotNil(t, f)
 		assert.Equal(t, 0, f.retries)
@@ -59,7 +59,7 @@ func TestNew(t *testing.T) {
 	})
 
 	t.Run("with zero retries", func(t *testing.T) {
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 
 		assert.NotNil(t, f)
 		assert.Equal(t, 0, f.retries)
@@ -76,7 +76,7 @@ func TestFetch_GetText(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -89,7 +89,7 @@ func TestFetch_GetText(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -103,7 +103,7 @@ func TestFetch_GetText(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText(server.URL)
 
 		assert.Error(t, err)
@@ -118,7 +118,7 @@ func TestFetch_GetText(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText(server.URL)
 
 		assert.Error(t, err)
@@ -127,7 +127,7 @@ func TestFetch_GetText(t *testing.T) {
 	})
 
 	t.Run("invalid URL", func(t *testing.T) {
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText("invalid://url")
 
 		assert.Error(t, err)
@@ -135,7 +135,7 @@ func TestFetch_GetText(t *testing.T) {
 	})
 
 	t.Run("connection refused", func(t *testing.T) {
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText("http://localhost:99999")
 
 		assert.Error(t, err)
@@ -156,7 +156,7 @@ func TestFetch_GetText(t *testing.T) {
 			"Content-Type":  "application/json",
 			"Authorization": "Bearer token",
 		}
-		f := New(headers, 0)
+		f := New(headers, 0, false)
 		result, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -186,7 +186,7 @@ func TestFetch_GetResult(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		var result TestResponse
 		resp, err := f.GetResult(server.URL, nil, &result)
 
@@ -216,7 +216,7 @@ func TestFetch_GetResult(t *testing.T) {
 			"X-Custom-Header": "custom-value",
 		}
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		var result TestResponse
 		resp, err := f.GetResult(server.URL, headers, &result)
 
@@ -234,7 +234,7 @@ func TestFetch_GetResult(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		var result TestResponse
 		resp, err := f.GetResult(server.URL, nil, &result)
 
@@ -252,7 +252,7 @@ func TestFetch_GetResult(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		var result TestResponse
 		resp, _ := f.GetResult(server.URL, nil, &result)
 
@@ -263,7 +263,7 @@ func TestFetch_GetResult(t *testing.T) {
 	})
 
 	t.Run("connection error", func(t *testing.T) {
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		var result TestResponse
 		resp, err := f.GetResult("http://localhost:99999", nil, &result)
 
@@ -281,7 +281,7 @@ func TestFetch_GetResult(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		var result TestResponse
 		resp, err := f.GetResult(server.URL, nil, &result)
 
@@ -308,7 +308,7 @@ func TestFetch_Integration_WithRetry(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 3)
+		f := New(nil, 3, false)
 		result, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -325,7 +325,7 @@ func TestFetch_Integration_WithRetry(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 2)
+		f := New(nil, 2, false)
 		result, err := f.GetText(server.URL)
 
 		assert.Error(t, err)
@@ -344,7 +344,7 @@ func TestFetch_UserAgent(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		_, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -360,7 +360,7 @@ func TestFetch_UserAgent(t *testing.T) {
 		defer server.Close()
 
 		headers := map[string]string{"User-Agent": customUA}
-		f := New(headers, 0)
+		f := New(headers, 0, false)
 		_, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -377,7 +377,7 @@ func TestFetch_Concurrent(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 
 		// Start multiple concurrent requests
 		numRequests := 10
@@ -421,7 +421,7 @@ func TestFetch_Concurrent(t *testing.T) {
 
 func TestFetch_EdgeCases(t *testing.T) {
 	t.Run("empty URL", func(t *testing.T) {
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText("")
 
 		assert.Error(t, err)
@@ -441,7 +441,7 @@ func TestFetch_EdgeCases(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -458,7 +458,7 @@ func TestFetch_EdgeCases(t *testing.T) {
 		}))
 		defer server.Close()
 
-		f := New(nil, 0)
+		f := New(nil, 0, false)
 		result, err := f.GetText(server.URL)
 
 		assert.NoError(t, err)
@@ -475,7 +475,7 @@ func BenchmarkNew(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = New(headers, 3)
+		_ = New(headers, 3, false)
 	}
 }
 
@@ -486,7 +486,7 @@ func BenchmarkGetText(b *testing.B) {
 	}))
 	defer server.Close()
 
-	f := New(nil, 0)
+	f := New(nil, 0, false)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

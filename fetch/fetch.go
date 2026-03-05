@@ -1,6 +1,7 @@
 package fetch
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"time"
@@ -16,6 +17,11 @@ type Fetch struct {
 	retries    int
 }
 
+var http11Transport = &http.Transport{
+	ForceAttemptHTTP2: false,
+	TLSNextProto:      make(map[string]func(string, *tls.Conn) http.RoundTripper),
+}
+
 var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
 	"Chrome/133.0.0.0 Safari/537.36"
 
@@ -24,10 +30,18 @@ var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (K
 // Parameters:
 //   - headers: a map of headers to be set on each request.
 //   - retries: the number of retry attempts for failed requests.
-func New(headers map[string]string, retries int) *Fetch {
+//   - disableHttp2: a boolean flag to disable HTTP/2.
+//
+// Returns a new Fetch instance.
+func New(headers map[string]string, retries int, disableHttp2 bool) *Fetch {
 	logger := log.New()
 
 	f := resty.New()
+
+	if disableHttp2 {
+		f.SetTransport(http11Transport)
+	}
+
 	f.SetHeader("User-Agent", headers["User-Agent"])
 
 	if headers == nil {
