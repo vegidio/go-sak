@@ -22,7 +22,7 @@ import (
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	fmt.Println(hash) // Output: d447b1ea40e6988b
+//	fmt.Println(hash) // Output: df8d09e93f874900a99b8775cc15b6c7
 func Xxh3Bytes(bytes []byte) (string, error) {
 	h := xxh3.New()
 	_, err := h.Write(bytes)
@@ -30,7 +30,7 @@ func Xxh3Bytes(bytes []byte) (string, error) {
 		return "", fmt.Errorf("failed to write bytes to hasher: %w", err)
 	}
 
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	return fmt.Sprintf("%x", h.Sum128().Bytes()), nil
 }
 
 // Xxh3String computes the XXH3 hash of the input string and returns it as a hexadecimal string.
@@ -49,7 +49,7 @@ func Xxh3Bytes(bytes []byte) (string, error) {
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
-//	fmt.Println(hash) // Output: d447b1ea40e6988b
+//	fmt.Println(hash) // Output: df8d09e93f874900a99b8775cc15b6c7
 func Xxh3String(str string) (string, error) {
 	return Xxh3Bytes([]byte(str))
 }

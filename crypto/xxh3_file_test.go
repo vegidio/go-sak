@@ -16,7 +16,7 @@ func TestXxh3Reader(t *testing.T) {
 		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
 		// Known XXH3 hash of "hello world"
-		assert.Equal(t, "d447b1ea40e6988b", hash)
+		assert.Equal(t, "df8d09e93f874900a99b8775cc15b6c7", hash)
 	})
 
 	t.Run("successful hash of empty string", func(t *testing.T) {
@@ -24,7 +24,7 @@ func TestXxh3Reader(t *testing.T) {
 		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
 		// Known XXH3 hash of empty string
-		assert.Equal(t, "2d06800538d394c2", hash)
+		assert.Equal(t, "99aa06d3014798d86001c324468d497f", hash)
 	})
 
 	t.Run("successful hash of multiline content", func(t *testing.T) {
@@ -32,7 +32,7 @@ func TestXxh3Reader(t *testing.T) {
 		reader := strings.NewReader(content)
 		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16) // XXH3 produces 16 hex characters
+		assert.Len(t, hash, 32) // XXH3-128 produces 32 hex characters
 		assert.NotEmpty(t, hash)
 	})
 
@@ -40,8 +40,8 @@ func TestXxh3Reader(t *testing.T) {
 		reader := strings.NewReader("test content")
 		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16)
-		assert.Regexp(t, "^[a-f0-9]{16}$", hash)
+		assert.Len(t, hash, 32)
+		assert.Regexp(t, "^[a-f0-9]{32}$", hash)
 	})
 
 	t.Run("successful hash of large content", func(t *testing.T) {
@@ -50,7 +50,7 @@ func TestXxh3Reader(t *testing.T) {
 		reader := strings.NewReader(largeContent)
 		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16)
+		assert.Len(t, hash, 32)
 		assert.NotEmpty(t, hash)
 	})
 
@@ -59,7 +59,7 @@ func TestXxh3Reader(t *testing.T) {
 		reader := strings.NewReader(content)
 		hash, err := Xxh3Reader(reader)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16)
+		assert.Len(t, hash, 32)
 	})
 
 	t.Run("same content produces same hash", func(t *testing.T) {
@@ -97,7 +97,7 @@ func TestXxh3File(t *testing.T) {
 		hash, err := Xxh3File(tempFile)
 		require.NoError(t, err)
 		// Known XXH3 hash of "hello world"
-		assert.Equal(t, "d447b1ea40e6988b", hash)
+		assert.Equal(t, "df8d09e93f874900a99b8775cc15b6c7", hash)
 	})
 
 	t.Run("successful hash of empty file", func(t *testing.T) {
@@ -107,7 +107,7 @@ func TestXxh3File(t *testing.T) {
 		hash, err := Xxh3File(tempFile)
 		require.NoError(t, err)
 		// Known XXH3 hash of empty string
-		assert.Equal(t, "2d06800538d394c2", hash)
+		assert.Equal(t, "99aa06d3014798d86001c324468d497f", hash)
 	})
 
 	t.Run("error when file does not exist", func(t *testing.T) {
@@ -132,7 +132,7 @@ func TestXxh3File(t *testing.T) {
 
 		hash, err := Xxh3File(tempFile)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16)
+		assert.Len(t, hash, 32)
 		assert.NotEmpty(t, hash)
 	})
 
@@ -144,7 +144,7 @@ func TestXxh3File(t *testing.T) {
 
 		hash, err := Xxh3File(tempFile)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16)
+		assert.Len(t, hash, 32)
 	})
 
 	t.Run("same file content produces same hash", func(t *testing.T) {
@@ -188,7 +188,7 @@ func TestXxh3File(t *testing.T) {
 
 		hash, err := Xxh3File(tempFile)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16)
+		assert.Len(t, hash, 32)
 	})
 
 	t.Run("successful hash of file with binary content", func(t *testing.T) {
@@ -198,7 +198,7 @@ func TestXxh3File(t *testing.T) {
 
 		hash, err := Xxh3File(tempFile)
 		require.NoError(t, err)
-		assert.Len(t, hash, 16)
+		assert.Len(t, hash, 32)
 	})
 
 	t.Run("error with invalid path characters", func(t *testing.T) {

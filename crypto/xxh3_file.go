@@ -33,7 +33,7 @@ func Xxh3Reader(reader io.Reader) (string, error) {
 	}
 
 	// Calculate the final hash and return as hex string
-	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+	return fmt.Sprintf("%x", hash.Sum128().Bytes()), nil
 }
 
 // Xxh3File computes the XXH3 hash of the file at the given path.
