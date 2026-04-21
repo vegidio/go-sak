@@ -10,6 +10,7 @@ import (
 // It takes the repository owner, repository name, and the release tag name as parameters.
 //
 // # Parameters:
+//   - ctx: Context for cancellation and timeouts
 //   - owner: The GitHub username or organization name that owns the repository
 //   - repo: The name of the repository
 //   - tagName: The tag name of the release (e.g., "v1.0.0")
@@ -20,15 +21,15 @@ import (
 //
 // # Example:
 //
-//	release, err := GetReleaseByName("microsoft", "vscode", "1.85.0")
+//	release, err := GetReleaseByName(ctx, "microsoft", "vscode", "1.85.0")
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
 //	fmt.Printf("Release: %s\n", release.GetTagName())
-func GetReleaseByName(owner, repo, tagName string) (*github.RepositoryRelease, error) {
+func GetReleaseByName(ctx context.Context, owner, repo, tagName string) (*github.RepositoryRelease, error) {
 	client := github.NewClient(nil)
 
-	release, _, err := client.Repositories.GetReleaseByTag(context.Background(), owner, repo, tagName)
+	release, _, err := client.Repositories.GetReleaseByTag(ctx, owner, repo, tagName)
 	if err != nil {
 		return nil, err
 	}

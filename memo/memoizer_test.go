@@ -52,7 +52,6 @@ func TestNewMemoizer(t *testing.T) {
 
 			assert.NotNil(t, memoizer)
 			assert.Equal(t, tt.store, memoizer.Store)
-			assert.NotNil(t, memoizer.Sf) // singleflight.Group should be initialized
 		})
 	}
 }
@@ -110,7 +109,7 @@ func TestMemoizer_Fields(t *testing.T) {
 	})
 
 	t.Run("Singleflight field is accessible", func(t *testing.T) {
-		assert.NotNil(t, memoizer.Sf)
+		// singleflight.Group is a value type (never nil); zero value is ready to use
 		// Verify it's actually a singleflight.Group by checking we can call methods on it
 		// We'll do this by ensuring the field exists and is of the correct type
 		_, _, _ = memoizer.Sf.Do("test", func() (interface{}, error) {
@@ -141,7 +140,7 @@ func TestMemoizer_Integration(t *testing.T) {
 
 		// Verify we can access fields multiple times
 		assert.Equal(t, mockStore, memoizer.Store)
-		assert.NotNil(t, memoizer.Sf)
+		// singleflight.Group is a value type (never nil); zero value is ready to use
 		assert.Equal(t, mockStore, memoizer.Store) // Second access
 
 		// Close should work

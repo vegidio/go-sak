@@ -12,6 +12,7 @@ import (
 // fetches the latest release from the specified repository and performs semantic version comparison.
 //
 // # Parameters:
+//   - ctx: Context for cancellation and timeouts
 //   - owner: The owner (username or organization) of the GitHub repository
 //   - repo: The name of the GitHub repository
 //   - version: The version to check (can be with or without 'v' prefix)
@@ -26,14 +27,14 @@ import (
 //
 // # Example:
 //
-//	outdated := IsOutdatedRelease("golang", "go", "1.20.0")
+//	outdated := IsOutdatedRelease(ctx, "golang", "go", "1.20.0")
 //	if outdated {
 //	    fmt.Println("Your Go version is outdated")
 //	}
-func IsOutdatedRelease(owner, repo, version string) bool {
+func IsOutdatedRelease(ctx context.Context, owner, repo, version string) bool {
 	client := github.NewClient(nil)
 
-	release, _, err := client.Repositories.GetLatestRelease(context.Background(), owner, repo)
+	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
 		return false
 	}

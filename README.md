@@ -66,21 +66,21 @@ Computes the XXH3 hash of a file at the given path and returns it as a lowercase
 
 HTTP client utilities for downloading files and making REST API requests.
 
-#### `New(headers map[string]string, retries int) *Fetch`
+#### `New(headers map[string]string, retries int, disableHttp2 bool) *Fetch`
 
-Creates a new Fetch instance with specified headers and retry settings. Automatically sets User-Agent and Content-Type headers if not provided.
+Creates a new Fetch instance with specified headers and retry settings. Automatically sets User-Agent and Content-Type headers if not provided. Redirects are capped at 5 and https→http downgrade is refused.
 
-#### `GetText(url string) (string, error)`
+#### `GetText(ctx context.Context, url string) (string, error)`
 
-Performs a GET request to the specified URL and returns the response body as a string.
+Performs a GET request to the specified URL and returns the response body as a string. The supplied context controls cancellation and deadlines.
 
-#### `GetResult(url string, headers map[string]string, result interface{}) (*resty.Response, error)`
+#### `GetResult(ctx context.Context, url string, headers map[string]string, result any) (*resty.Response, error)`
 
-Performs a GET request and unmarshals the JSON response body into the provided result interface.
+Performs a GET request and unmarshals the JSON response body into the provided result. The supplied context controls cancellation and deadlines.
 
-#### `PostResult(url string, headers map[string]string, body interface{}, result interface{}) (*resty.Response, error)`
+#### `PostResult(ctx context.Context, url string, headers map[string]string, body any, result any) (*resty.Response, error)`
 
-Performs a POST request with a JSON body and unmarshals the response into the provided result interface.
+Performs a POST request with a JSON body and unmarshals the response into the provided result. The supplied context controls cancellation and deadlines.
 
 #### `NewRequest(url string, filePath string, headers map[string]string) (*Request, error)`
 
@@ -166,15 +166,15 @@ Extracts all files and directories from a TAR.XZ archive to a target directory. 
 
 GitHub API utilities for release management.
 
-#### `GetLatestRelease(owner, repo string) (*github.RepositoryRelease, error)`
+#### `GetLatestRelease(ctx context.Context, owner, repo string) (*github.RepositoryRelease, error)`
 
-Retrieves the latest published release for the specified GitHub repository, including tag name, body, assets, and other metadata.
+Retrieves the latest published release for the specified GitHub repository, including tag name, body, assets, and other metadata. The supplied context controls cancellation and deadlines.
 
-#### `GetReleaseByName(owner, repo, tagName string) (*github.RepositoryRelease, error)`
+#### `GetReleaseByName(ctx context.Context, owner, repo, tagName string) (*github.RepositoryRelease, error)`
 
-Retrieves a specific release by its tag name for the specified GitHub repository.
+Retrieves a specific release by its tag name for the specified GitHub repository. The supplied context controls cancellation and deadlines.
 
-#### `IsOutdatedRelease(owner, repo, version string) bool`
+#### `IsOutdatedRelease(ctx context.Context, owner, repo, version string) bool`
 
 Checks if a given version is outdated compared to the latest release of a GitHub repository using semantic version comparison. Automatically handles version prefixes and returns false on errors.
 

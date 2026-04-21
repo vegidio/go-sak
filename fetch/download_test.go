@@ -48,7 +48,7 @@ func TestNewRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := New(tt.headers, 3)
+			f := New(tt.headers, 3, false)
 
 			req, err := f.NewRequest(tt.url, tt.filePath, nil)
 
@@ -181,7 +181,7 @@ func TestDownloadFile(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			f := New(nil, 1)
+			f := New(nil, 1, false)
 			req, err := f.NewRequest(server.URL, filePath, nil)
 			require.NoError(t, err)
 
@@ -241,7 +241,7 @@ func TestDownloadFileWithCancel(t *testing.T) {
 	defer server.Close()
 
 	filePath := filepath.Join(tempDir, "cancel_test.txt")
-	f := New(nil, 0)
+	f := New(nil, 0, false)
 	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
@@ -287,7 +287,7 @@ func TestDownloadFiles(t *testing.T) {
 
 	// Create requests
 	requests := make([]*Request, len(servers))
-	f := New(nil, 1)
+	f := New(nil, 1, false)
 
 	for i, server := range servers {
 		filePath := filepath.Join(tempDir, fmt.Sprintf("file_%d.txt", i))
@@ -373,7 +373,7 @@ func TestDownloadWithRetries(t *testing.T) {
 	defer server.Close()
 
 	filePath := filepath.Join(tempDir, "retry_test.txt")
-	f := New(nil, 3) // 3 retries
+	f := New(nil, 3, false) // 3 retries
 	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
@@ -427,7 +427,7 @@ func TestDownloadWithRangeRequest(t *testing.T) {
 	err = os.WriteFile(filePath, []byte(partialContent), 0644)
 	require.NoError(t, err)
 
-	f := New(nil, 1)
+	f := New(nil, 1, false)
 	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
@@ -531,7 +531,7 @@ func TestDownloadFilePermissionError(t *testing.T) {
 	// Try to write to a directory that doesn't exist or is not writable
 	filePath := "/root/nonexistent/file.txt"
 
-	f := New(nil, 1)
+	f := New(nil, 1, false)
 	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 
@@ -579,7 +579,7 @@ func TestDownloadFilesParallelism(t *testing.T) {
 
 	// Create 5 requests but limit to 2 concurrent
 	requests := make([]*Request, 5)
-	f := New(nil, 1)
+	f := New(nil, 1, false)
 
 	for i := range requests {
 		filePath := filepath.Join(tempDir, fmt.Sprintf("parallel_%d.txt", i))
@@ -624,7 +624,7 @@ func TestResponseBytes(t *testing.T) {
 	defer server.Close()
 
 	filePath := filepath.Join(tempDir, "bytes_test.txt")
-	f := New(nil, 1)
+	f := New(nil, 1, false)
 	req, err := f.NewRequest(server.URL, filePath, nil)
 	require.NoError(t, err)
 

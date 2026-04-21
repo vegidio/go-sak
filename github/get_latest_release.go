@@ -10,6 +10,7 @@ import (
 // owner and repository name as parameters and returns the latest release information or an error if the request fails.
 //
 // # Parameters:
+//   - ctx: Context for cancellation and timeouts
 //   - owner: The GitHub username or organization name that owns the repository
 //   - repo: The name of the repository
 //
@@ -19,15 +20,15 @@ import (
 //
 // # Example:
 //
-//	release, err := GetLatestRelease("microsoft", "vscode")
+//	release, err := GetLatestRelease(ctx, "microsoft", "vscode")
 //	if err != nil {
 //	    log.Fatal(err)
 //	}
 //	fmt.Printf("Latest release: %s\n", release.GetTagName())
-func GetLatestRelease(owner, repo string) (*github.RepositoryRelease, error) {
+func GetLatestRelease(ctx context.Context, owner, repo string) (*github.RepositoryRelease, error) {
 	client := github.NewClient(nil)
 
-	release, _, err := client.Repositories.GetLatestRelease(context.Background(), owner, repo)
+	release, _, err := client.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
 		return nil, err
 	}

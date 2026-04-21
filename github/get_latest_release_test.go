@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"testing"
@@ -17,7 +18,7 @@ func TestGetLatestRelease(t *testing.T) {
 		}
 
 		// Test with the Go repository, which is stable and always has releases
-		release, err := GetLatestRelease("golang", "go")
+		release, err := GetLatestRelease(context.Background(), "golang", "go")
 
 		if err != nil {
 			// Skip if there's a network/API issue
@@ -35,7 +36,7 @@ func TestGetLatestRelease(t *testing.T) {
 			t.Skip("Skipping integration test in short mode")
 		}
 
-		release, err := GetLatestRelease("microsoft", "vscode")
+		release, err := GetLatestRelease(context.Background(), "microsoft", "vscode")
 
 		if err != nil {
 			t.Skipf("API call failed (likely network/rate limit): %v", err)
@@ -45,26 +46,26 @@ func TestGetLatestRelease(t *testing.T) {
 		require.NotNil(t, release)
 		assert.NotEmpty(t, release.GetTagName())
 		assert.NotNil(t, release.Name)
-		// VSCode releases typically have numeric versions
-		assert.Regexp(t, `^\d+\.\d+\.\d+`, release.GetTagName())
+		// VSCode release tags follow semver with an optional "v" prefix (e.g. "1.85.0" or "v0.44.2").
+		assert.Regexp(t, `^v?\d+\.\d+\.\d+`, release.GetTagName())
 	})
 
 	t.Run("error with empty owner", func(t *testing.T) {
-		release, err := GetLatestRelease("", "repo")
+		release, err := GetLatestRelease(context.Background(), "", "repo")
 
 		assert.Error(t, err)
 		assert.Nil(t, release)
 	})
 
 	t.Run("error with empty repo", func(t *testing.T) {
-		release, err := GetLatestRelease("owner", "")
+		release, err := GetLatestRelease(context.Background(), "owner", "")
 
 		assert.Error(t, err)
 		assert.Nil(t, release)
 	})
 
 	t.Run("error with both empty parameters", func(t *testing.T) {
-		release, err := GetLatestRelease("", "")
+		release, err := GetLatestRelease(context.Background(), "", "")
 
 		assert.Error(t, err)
 		assert.Nil(t, release)
@@ -76,7 +77,7 @@ func TestGetLatestRelease(t *testing.T) {
 		}
 
 		// Use a repository that definitely doesn't exist
-		release, err := GetLatestRelease("thisuserdoesnotexist12345", "thisrepodoesnotexist12345")
+		release, err := GetLatestRelease(context.Background(), "thisuserdoesnotexist12345", "thisrepodoesnotexist12345")
 
 		assert.Error(t, err)
 		assert.Nil(t, release)
@@ -216,7 +217,7 @@ func TestGetLatestRelease(t *testing.T) {
 					t.Skip("Skipping API validation test in short mode")
 				}
 
-				_, err := GetLatestRelease(tc.owner, tc.repo)
+				_, err := GetLatestRelease(context.Background(), tc.owner, tc.repo)
 				// All these cases should result in errors (either validation or 404)
 				assert.Error(t, err, tc.description)
 			})

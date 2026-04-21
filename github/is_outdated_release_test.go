@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -104,7 +105,7 @@ func TestIsOutdatedRelease_VersionComparison(t *testing.T) {
 func TestIsOutdatedRelease_ErrorScenarios(t *testing.T) {
 	t.Run("invalid_repository", func(t *testing.T) {
 		// Test with a repository that doesn't exist
-		result := IsOutdatedRelease("nonexistent-owner", "nonexistent-repo", "1.0.0")
+		result := IsOutdatedRelease(context.Background(), "nonexistent-owner", "nonexistent-repo", "1.0.0")
 		assert.False(t, result, "Should return false when repository doesn't exist")
 	})
 }
@@ -112,14 +113,14 @@ func TestIsOutdatedRelease_ErrorScenarios(t *testing.T) {
 func TestIsOutdatedRelease_EdgeCases(t *testing.T) {
 	t.Run("empty_version_string", func(t *testing.T) {
 		// Test with an empty version string
-		result := IsOutdatedRelease("golang", "go", "")
+		result := IsOutdatedRelease(context.Background(), "golang", "go", "")
 		// The function should handle this gracefully
 		assert.False(t, result, "Should handle empty version string gracefully")
 	})
 
 	t.Run("invalid_semver_format", func(t *testing.T) {
 		// Test with invalid semantic version format
-		result := IsOutdatedRelease("golang", "go", "invalid-version")
+		result := IsOutdatedRelease(context.Background(), "golang", "go", "invalid-version")
 		// semver.Compare should handle invalid versions appropriately
 		assert.False(t, result, "Should handle invalid semver format gracefully")
 	})
@@ -133,14 +134,36 @@ func TestIsOutdatedRelease_Integration(t *testing.T) {
 	}
 
 	t.Run("real_repository_check", func(t *testing.T) {
-		// Test with a real repository - using a version that's likely to be outdated
-		result := IsOutdatedRelease("vegidio", "mediasim", "1.0.0")
-		assert.True(t, result, "mediasim 1.0.0 should be outdated compared to latest release")
+		// Preflight: make sure the API is reachable and the latest release has a semver-compatible Name.
+		// IsOutdatedRelease swallows errors and returns false for *any* failure (rate limit, missing release,
+		// empty Name) - so without this preflight we can't distinguish those failures from a "not outdated"
+		// result.
+		release, err := GetLatestRelease(context.Background(), "vegidio", "mediasim")
+		if err != nil {
+			t.Skipf("API call failed (likely network/rate limit): %v", err)
+		}
+
+		name := release.GetName()
+		if name == "" {
+			t.Skip("release.Name is empty; IsOutdatedRelease cannot determine outdated status from TagName alone")
+		}
+
+		normalized := name
+		if !strings.HasPrefix(normalized, "v") {
+			normalized = "v" + normalized
+		}
+
+		if semver.Compare(normalized, "v1.0.0") <= 0 {
+			t.Skipf("latest release %q is not strictly newer than 1.0.0; nothing to assert", name)
+		}
+
+		result := IsOutdatedRelease(context.Background(), "vegidio", "mediasim", "1.0.0")
+		assert.True(t, result, "mediasim 1.0.0 should be outdated compared to latest release %q", name)
 	})
 
 	t.Run("current_version_check", func(t *testing.T) {
 		// Test with a very recent version that's likely to be current or newer
-		result := IsOutdatedRelease("golang", "go", "1.23.0")
+		result := IsOutdatedRelease(context.Background(), "golang", "go", "1.23.0")
 		// This assertion just verifies the function doesn't panic
 		assert.IsType(t, false, result, "Should return a boolean value")
 	})

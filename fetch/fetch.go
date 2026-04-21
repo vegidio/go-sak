@@ -1,6 +1,7 @@
 package fetch
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net/http"
@@ -37,12 +38,17 @@ func New(headers map[string]string, retries int, disableHttp2 bool) *Fetch {
 	logger := log.New()
 
 	f := resty.New()
+	f.SetRedirectPolicy(resty.FlexibleRedirectPolicy(maxRedirects), resty.RedirectPolicyFunc(func(req *http.Request, via []*http.Request) error {
+		if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme == "http" {
+			return fmt.Errorf("refusing redirect from https to http: %s", req.URL)
+		}
+
+		return nil
+	}))
 
 	if disableHttp2 {
 		f.SetTransport(http11Transport)
 	}
-
-	f.SetHeader("User-Agent", headers["User-Agent"])
 
 	if headers == nil {
 		headers = make(map[string]string)
@@ -90,17 +96,24 @@ func New(headers map[string]string, retries int, disableHttp2 bool) *Fetch {
 // GetText performs a GET request to the specified URL and returns the response body as a string.
 //
 // Parameters:
+//   - ctx: context for cancellation and timeouts.
 //   - url: the URL to send the GET request to.
 //
 // Returns the response body as a string and an error if the request fails.
-func (f *Fetch) GetText(url string) (string, error) {
+func (f *Fetch) GetText(ctx context.Context, url string) (string, error) {
 	resp, err := f.restClient.R().
+		SetContext(ctx).
 		Get(url)
 
 	if err != nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode()
+		}
+
 		log.WithFields(log.Fields{
 			"error":  err,
-			"status": resp.StatusCode(),
+			"status": status,
 			"url":    url,
 		}).Error("Error getting text")
 
@@ -109,7 +122,6 @@ func (f *Fetch) GetText(url string) (string, error) {
 
 	if resp.IsError() {
 		log.WithFields(log.Fields{
-			"error":  err,
 			"status": resp.StatusCode(),
 			"url":    url,
 		}).Error("Error getting text")
@@ -124,33 +136,39 @@ func (f *Fetch) GetText(url string) (string, error) {
 // interface.
 //
 // Parameters:
+//   - ctx: context for cancellation and timeouts.
 //   - url: the URL to send the GET request to.
+//   - headers: per-request headers to set in addition to the client defaults.
 //   - result: a pointer to the variable where the response body will be unmarshalled.
 //
 // Returns:
 //   - *resty.Response: the response from the GET request.
 //   - error: an error if the request fails or the response indicates an error.
-func (f *Fetch) GetResult(url string, headers map[string]string, result interface{}) (*resty.Response, error) {
-	return f.doRequest(url, headers, nil, result, "GET")
+func (f *Fetch) GetResult(ctx context.Context, url string, headers map[string]string, result any) (*resty.Response, error) {
+	return f.doRequest(ctx, url, headers, nil, result, "GET")
 }
 
 // PostResult performs a POST request to the specified URL and unmarshals the response body into the provided result
 // interface.
 //
 // Parameters:
+//   - ctx: context for cancellation and timeouts.
 //   - url: the URL to send the POST request to.
+//   - headers: per-request headers to set in addition to the client defaults.
+//   - body: optional request body to be marshalled as JSON.
 //   - result: a pointer to the variable where the response body will be unmarshalled.
 //
 // Returns:
 //   - *resty.Response: the response from the POST request.
 //   - error: an error if the request fails or the response indicates an error.
-func (f *Fetch) PostResult(url string, headers map[string]string, body interface{}, result interface{}) (*resty.Response, error) {
-	return f.doRequest(url, headers, body, result, "POST")
+func (f *Fetch) PostResult(ctx context.Context, url string, headers map[string]string, body any, result any) (*resty.Response, error) {
+	return f.doRequest(ctx, url, headers, body, result, "POST")
 }
 
 // doRequest performs an HTTP request with the specified method and handles common error logging
-func (f *Fetch) doRequest(url string, headers map[string]string, body interface{}, result interface{}, method string) (*resty.Response, error) {
+func (f *Fetch) doRequest(ctx context.Context, url string, headers map[string]string, body any, result any, method string) (*resty.Response, error) {
 	req := f.restClient.R().
+		SetContext(ctx).
 		SetHeaders(headers).
 		ForceContentType("application/json").
 		SetResult(result)
@@ -172,9 +190,14 @@ func (f *Fetch) doRequest(url string, headers map[string]string, body interface{
 	}
 
 	if err != nil {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode()
+		}
+
 		log.WithFields(log.Fields{
-			"error":  resp.Error(),
-			"status": resp.StatusCode(),
+			"error":  err,
+			"status": status,
 			"url":    url,
 		}).Error("error getting result")
 
@@ -183,7 +206,6 @@ func (f *Fetch) doRequest(url string, headers map[string]string, body interface{
 
 	if resp.IsError() {
 		log.WithFields(log.Fields{
-			"error":  err,
 			"status": resp.StatusCode(),
 			"url":    url,
 		}).Error("Error getting result")

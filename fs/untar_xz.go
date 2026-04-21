@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ulikunitz/xz"
 )
@@ -20,6 +19,7 @@ import (
 //   - Preventing path traversal attacks using ".." segments
 //   - Normalizing path separators to handle both forward slashes and backslashes
 //   - Validating that extracted files remain within the target directory
+//   - Validating that symbolic link targets remain within the target directory
 //
 // # Parameters:
 //   - tarXzPath: Path to the TAR.XZ file to extract
@@ -50,7 +50,7 @@ func UntarXz(tarXzPath, targetDirectory string) error {
 	tarReader := tar.NewReader(xzReader)
 
 	// Ensure the destination directory exists
-	if err = os.MkdirAll(targetDirectory, 0755); err != nil {
+	if err = os.MkdirAll(targetDirectory, 0o755); err != nil {
 		return err
 	}
 
@@ -64,35 +64,9 @@ func UntarXz(tarXzPath, targetDirectory string) error {
 			return err
 		}
 
-		// Normalize the archive entry name to guard against path traversal attacks
-		name := header.Name
-		name = strings.ReplaceAll(name, "\\", "/")
-
-		// Clean the path
-		cleanName := strings.TrimPrefix(name, "./")
-		cleanName = strings.TrimPrefix(cleanName, "/")
-		cleanName = strings.TrimPrefix(cleanName, "./")
-
-		// Check for absolute paths
-		if isAbsolutePath(name) {
-			return fmt.Errorf("illegal file path: %s", header.Name)
-		}
-
-		// Check for path traversal using normalized segments
-		segments := strings.Split(strings.TrimPrefix(strings.ReplaceAll(name, "\\", "/"), "/"), "/")
-		for _, seg := range segments {
-			if seg == ".." {
-				return fmt.Errorf("illegal file path: %s", header.Name)
-			}
-		}
-
-		// Construct the destination path
-		fpath := filepath.Join(targetDirectory, filepath.FromSlash(cleanName))
-
-		// Ensure the final path is within the target directory
-		rel, relErr := filepath.Rel(targetDirectory, fpath)
-		if relErr != nil || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) || rel == ".." {
-			return fmt.Errorf("illegal file path: %s", header.Name)
+		fpath, err := sanitizeArchivePath(header.Name, targetDirectory)
+		if err != nil {
+			return err
 		}
 
 		// Handle different file types
@@ -105,7 +79,7 @@ func UntarXz(tarXzPath, targetDirectory string) error {
 
 		case tar.TypeReg:
 			// Ensure the parent directory exists
-			if err = os.MkdirAll(filepath.Dir(fpath), 0755); err != nil {
+			if err = os.MkdirAll(filepath.Dir(fpath), 0o755); err != nil {
 				return err
 			}
 
@@ -132,7 +106,10 @@ func UntarXz(tarXzPath, targetDirectory string) error {
 			outFile.Close()
 
 		case tar.TypeSymlink:
-			// Create a symbolic link
+			if err = sanitizeArchiveSymlink(fpath, header.Linkname, targetDirectory); err != nil {
+				return fmt.Errorf("illegal symlink target: %s -> %s", header.Name, header.Linkname)
+			}
+
 			if err = os.Symlink(header.Linkname, fpath); err != nil {
 				return err
 			}

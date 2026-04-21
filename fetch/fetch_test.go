@@ -1,6 +1,7 @@
 package fetch
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -77,7 +78,7 @@ func TestFetch_GetText(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 0, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 		assert.Equal(t, expectedBody, result)
@@ -90,7 +91,7 @@ func TestFetch_GetText(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 0, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "", result)
@@ -104,7 +105,7 @@ func TestFetch_GetText(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 0, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "404")
@@ -119,7 +120,7 @@ func TestFetch_GetText(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 0, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "500")
@@ -128,7 +129,7 @@ func TestFetch_GetText(t *testing.T) {
 
 	t.Run("invalid URL", func(t *testing.T) {
 		f := New(nil, 0, false)
-		result, err := f.GetText("invalid://url")
+		result, err := f.GetText(context.Background(), "invalid://url")
 
 		assert.Error(t, err)
 		assert.Empty(t, result)
@@ -136,7 +137,7 @@ func TestFetch_GetText(t *testing.T) {
 
 	t.Run("connection refused", func(t *testing.T) {
 		f := New(nil, 0, false)
-		result, err := f.GetText("http://localhost:99999")
+		result, err := f.GetText(context.Background(), "http://localhost:99999")
 
 		assert.Error(t, err)
 		assert.Empty(t, result)
@@ -157,7 +158,7 @@ func TestFetch_GetText(t *testing.T) {
 			"Authorization": "Bearer token",
 		}
 		f := New(headers, 0, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 		assert.Equal(t, expectedBody, result)
@@ -188,7 +189,7 @@ func TestFetch_GetResult(t *testing.T) {
 
 		f := New(nil, 0, false)
 		var result TestResponse
-		resp, err := f.GetResult(server.URL, nil, &result)
+		resp, err := f.GetResult(context.Background(), server.URL, nil, &result)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
@@ -218,7 +219,7 @@ func TestFetch_GetResult(t *testing.T) {
 
 		f := New(nil, 0, false)
 		var result TestResponse
-		resp, err := f.GetResult(server.URL, headers, &result)
+		resp, err := f.GetResult(context.Background(), server.URL, headers, &result)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
@@ -236,7 +237,7 @@ func TestFetch_GetResult(t *testing.T) {
 
 		f := New(nil, 0, false)
 		var result TestResponse
-		resp, err := f.GetResult(server.URL, nil, &result)
+		resp, err := f.GetResult(context.Background(), server.URL, nil, &result)
 
 		assert.Error(t, err)
 		assert.NotNil(t, resp)
@@ -254,7 +255,7 @@ func TestFetch_GetResult(t *testing.T) {
 
 		f := New(nil, 0, false)
 		var result TestResponse
-		resp, _ := f.GetResult(server.URL, nil, &result)
+		resp, _ := f.GetResult(context.Background(), server.URL, nil, &result)
 
 		// Should not error on invalid JSON when using resty with SetResult
 		// Resty will attempt to unmarshal and may partially succeed or fail silently
@@ -265,7 +266,7 @@ func TestFetch_GetResult(t *testing.T) {
 	t.Run("connection error", func(t *testing.T) {
 		f := New(nil, 0, false)
 		var result TestResponse
-		resp, err := f.GetResult("http://localhost:99999", nil, &result)
+		resp, err := f.GetResult(context.Background(), "http://localhost:99999", nil, &result)
 
 		assert.Error(t, err)
 		assert.NotNil(t, resp)
@@ -283,7 +284,7 @@ func TestFetch_GetResult(t *testing.T) {
 
 		f := New(nil, 0, false)
 		var result TestResponse
-		resp, err := f.GetResult(server.URL, nil, &result)
+		resp, err := f.GetResult(context.Background(), server.URL, nil, &result)
 
 		assert.NoError(t, err)
 		assert.NotNil(t, resp)
@@ -309,7 +310,7 @@ func TestFetch_Integration_WithRetry(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 3, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 		assert.Equal(t, "Success after retry", result)
@@ -326,7 +327,7 @@ func TestFetch_Integration_WithRetry(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 2, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.Error(t, err)
 		assert.Empty(t, result)
@@ -345,7 +346,7 @@ func TestFetch_UserAgent(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 0, false)
-		_, err := f.GetText(server.URL)
+		_, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 	})
@@ -361,7 +362,7 @@ func TestFetch_UserAgent(t *testing.T) {
 
 		headers := map[string]string{"User-Agent": customUA}
 		f := New(headers, 0, false)
-		_, err := f.GetText(server.URL)
+		_, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 	})
@@ -387,7 +388,7 @@ func TestFetch_Concurrent(t *testing.T) {
 		for i := 0; i < numRequests; i++ {
 			go func(id int) {
 				url := fmt.Sprintf("%s/request-%d", server.URL, id)
-				result, err := f.GetText(url)
+				result, err := f.GetText(context.Background(), url)
 				if err != nil {
 					errors <- err
 				} else {
@@ -422,7 +423,7 @@ func TestFetch_Concurrent(t *testing.T) {
 func TestFetch_EdgeCases(t *testing.T) {
 	t.Run("empty URL", func(t *testing.T) {
 		f := New(nil, 0, false)
-		result, err := f.GetText("")
+		result, err := f.GetText(context.Background(), "")
 
 		assert.Error(t, err)
 		assert.Empty(t, result)
@@ -442,7 +443,7 @@ func TestFetch_EdgeCases(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 0, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 		assert.Len(t, result, len(largeBody))
@@ -459,7 +460,7 @@ func TestFetch_EdgeCases(t *testing.T) {
 		defer server.Close()
 
 		f := New(nil, 0, false)
-		result, err := f.GetText(server.URL)
+		result, err := f.GetText(context.Background(), server.URL)
 
 		assert.NoError(t, err)
 		assert.Equal(t, specialBody, result)
@@ -490,6 +491,6 @@ func BenchmarkGetText(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = f.GetText(server.URL)
+		_, _ = f.GetText(context.Background(), server.URL)
 	}
 }

@@ -2,6 +2,7 @@ package os
 
 import (
 	"os"
+	"strings"
 	"syscall"
 )
 
@@ -29,7 +30,20 @@ func ReExec(envVars ...string) {
 	}
 
 	exe, _ := os.Executable()
-	env := append(os.Environ(), "APP_REEXEC=1")
+
+	// Start from the current environment minus any prior APP_REEXEC entry.
+	// Without this, a caller that explicitly set APP_REEXEC to a non-"1" value would leak a duplicate entry into the
+	// re-executed process; POSIX getenv returns the first match, so the guard above would fail to trigger and recursion
+	// would not stop.
+	current := os.Environ()
+	env := make([]string, 0, len(current)+len(envVars)+1)
+	for _, kv := range current {
+		if !strings.HasPrefix(kv, "APP_REEXEC=") {
+			env = append(env, kv)
+		}
+	}
+
+	env = append(env, "APP_REEXEC=1")
 	env = append(env, envVars...)
 
 	syscall.Exec(exe, os.Args, env)

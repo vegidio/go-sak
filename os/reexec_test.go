@@ -189,23 +189,29 @@ func TestReExec_EdgeCases(t *testing.T) {
 	})
 
 	t.Run("APP_REEXEC value other than 1 allows re-execution", func(t *testing.T) {
-		if os.Getenv("TEST_REEXEC_OTHER_VALUE") == "1" {
-			// Set APP_REEXEC to something other than "1"
-			os.Setenv("APP_REEXEC", "0")
-
-			ReExec("TEST_VAR=test")
-
-			// Should have re-executed and set APP_REEXEC to "1"
+		// Stage 2: re-executed process. ReExec must have set APP_REEXEC=1 and passed TEST_VAR through.
+		if os.Getenv("TEST_REEXEC_OTHER_STAGE2") == "1" {
 			assert.Equal(t, "1", os.Getenv("APP_REEXEC"))
+			assert.Equal(t, "test", os.Getenv("TEST_VAR"))
 			os.Exit(49)
 		}
 
+		// Stage 1: initial subprocess. APP_REEXEC is "0" (non-"1"), so ReExec must re-execute.
+		if os.Getenv("TEST_REEXEC_OTHER_STAGE1") == "1" {
+			os.Setenv("APP_REEXEC", "0")
+			ReExec("TEST_REEXEC_OTHER_STAGE2=1", "TEST_VAR=test")
+			// Only reached if syscall.Exec failed, which is a real failure to surface.
+			t.Fatal("syscall.Exec did not replace the process")
+		}
+
 		cmd := exec.Command(os.Args[0], "-test.run=TestReExec_EdgeCases/APP_REEXEC_value_other_than_1_allows_re-execution")
-		cmd.Env = append(os.Environ(), "TEST_REEXEC_OTHER_VALUE=1")
+		cmd.Env = append(os.Environ(), "TEST_REEXEC_OTHER_STAGE1=1")
 
 		err := cmd.Run()
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			assert.Equal(t, 49, exitErr.ExitCode())
+		} else {
+			t.Fatalf("expected exit error with code 49, got: %v", err)
 		}
 	})
 }

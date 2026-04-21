@@ -2,10 +2,27 @@ package fetch
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
 )
+
+const maxRedirects = 5
+
+// safeCheckRedirect caps the redirect chain and refuses https→http downgrade.
+// Used by both the resty client and the idle-timeout client.
+func safeCheckRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxRedirects)
+	}
+
+	if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme == "http" {
+		return fmt.Errorf("refusing redirect from https to http: %s", req.URL)
+	}
+
+	return nil
+}
 
 type timeoutConn struct {
 	net.Conn
@@ -41,5 +58,8 @@ func newIdleTimeoutClient(idleTimeout time.Duration) *http.Client {
 		return &timeoutConn{Conn: rawConn, idle: idleTimeout}, nil
 	}
 
-	return &http.Client{Transport: base}
+	return &http.Client{
+		Transport:     base,
+		CheckRedirect: safeCheckRedirect,
+	}
 }

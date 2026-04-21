@@ -180,6 +180,34 @@ func TestUntarXz(t *testing.T) {
 		assert.Equal(t, "file.txt", target)
 	})
 
+	t.Run("error on symlink with traversal target", func(t *testing.T) {
+		tarXzPath := createTestTarXzWithSymlink(t, map[string]testEntry{}, "link.txt", "../../../etc/passwd")
+		defer os.Remove(tarXzPath)
+
+		targetDir := t.TempDir()
+
+		err := UntarXz(tarXzPath, targetDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal symlink target")
+
+		_, lstatErr := os.Lstat(filepath.Join(targetDir, "link.txt"))
+		assert.True(t, os.IsNotExist(lstatErr), "symlink must not be created")
+	})
+
+	t.Run("error on symlink with absolute target", func(t *testing.T) {
+		tarXzPath := createTestTarXzWithSymlink(t, map[string]testEntry{}, "link.txt", "/etc/passwd")
+		defer os.Remove(tarXzPath)
+
+		targetDir := t.TempDir()
+
+		err := UntarXz(tarXzPath, targetDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "illegal symlink target")
+
+		_, lstatErr := os.Lstat(filepath.Join(targetDir, "link.txt"))
+		assert.True(t, os.IsNotExist(lstatErr), "symlink must not be created")
+	})
+
 	t.Run("handles files with backslashes in names", func(t *testing.T) {
 		tarXzPath := createTestTarXz(t, map[string]testEntry{
 			"dir\\file.txt": {content: "content", isDir: false, mode: 0644},
