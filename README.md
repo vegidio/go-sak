@@ -156,6 +156,10 @@ Creates a file in the user's configuration directory with the specified applicat
 
 Extracts all files and directories from a ZIP archive to a target directory. Implements security measures to prevent Zip Slip attacks by validating paths and preventing traversal.
 
+#### `Un7zip(sevenZipPath, targetDirectory string) error`
+
+Extracts all files and directories from a 7z archive to a target directory. Implements security measures to prevent Zip Slip attacks by validating paths and preventing traversal.
+
 #### `UntarXz(tarXzPath, targetDirectory string) error`
 
 Extracts all files and directories from a TAR.XZ archive to a target directory. Includes security measures against path traversal attacks and preserves file permissions.
