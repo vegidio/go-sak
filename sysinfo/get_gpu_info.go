@@ -20,15 +20,16 @@ type GPUInfo struct {
 	Memory uint
 }
 
+// pciIDToken matches the "[vendor:device]" token that `lspci -nn` appends to a device description.
+var pciIDToken = regexp.MustCompile(`\s*\[[0-9a-fA-F]{4}:[0-9a-fA-F]{4}]`)
+
 // GetGPUInfo returns GPU info across macOS, Linux and Windows.
 //
 // Backends (best-effort):
 //   - macOS: system_profiler SPDisplaysDataType (text parsing)
 //   - Windows: PowerShell CIM Win32_VideoController
-//   - Linux:
-//     1) NVIDIA: nvidia-smi (if present)
-//     2) /sys/class/drm/* (VRAM for AMD amdgpu when available)
-//     3) lspci fallback (name/vendor; memory unknown)
+//   - Linux: the results of /sys/class/drm/* (VRAM when available), lspci (readable names) and nvidia-smi
+//     (authoritative NVIDIA name/VRAM) are merged by PCI address, because no single source sees every GPU.
 func GetGPUInfo() ([]GPUInfo, error) {
 	var gpus []GPUInfo
 	var err error
@@ -188,42 +189,71 @@ func parseMacVRAMToMiB(s string) uint {
 
 // region - Linux
 
+// linuxGPU is a GPU detected by one of the Linux probes, carrying the PCI address used to merge the probes.
+type linuxGPU struct {
+	GPUInfo
+	slot string // normalized PCI address, e.g. "0000:01:00.0"; empty when the probe doesn't report one
+}
+
+// nvidiaGPU is a row of nvidia-smi output; busID is empty when the driver didn't report it.
+type nvidiaGPU struct {
+	name   string
+	memory uint
+	busID  string
+}
+
 func linuxGPUInfo() ([]GPUInfo, error) {
 	var errs []string
+	var gpus []linuxGPU
 
-	// Prefer NVIDIA if available.
-	if gpus, err := viaNvidiaSMILinux(); err == nil && len(gpus) > 0 {
-		return gpus, nil
-	} else if err != nil && !isExecNotFound(err) {
-		errs = append(errs, "nvidia-smi: "+err.Error())
-	}
-
-	if gpus, err := viaLinuxDRMSysfs(); err == nil && len(gpus) > 0 {
-		return gpus, nil
-	} else if err != nil {
+	// The probes are merged instead of used first-wins: none of them sees every GPU on its own. A discrete GPU whose
+	// DRM driver isn't loaded (or runs with modeset off) has no /sys/class/drm entry, lspci is missing on minimal
+	// systems, and nvidia-smi only knows about NVIDIA cards.
+	if drm, err := viaLinuxDRMSysfs(); err == nil {
+		gpus = drm
+	} else {
 		errs = append(errs, "linux drm sysfs: "+err.Error())
 	}
 
-	if gpus, err := viaLinuxLspci(); err == nil && len(gpus) > 0 {
-		return gpus, nil
-	} else if err != nil {
+	// lspci contributes human-readable names (and GPUs that DRM didn't enumerate).
+	if lspci, err := viaLinuxLspci(); err == nil {
+		gpus = mergeLinuxGPUs(gpus, lspci)
+	} else {
 		errs = append(errs, "linux lspci: "+err.Error())
 	}
 
-	if len(errs) == 0 {
-		return nil, errors.New("failed to detect GPU")
+	// nvidia-smi is authoritative for NVIDIA cards: it reports the marketing name and the real VRAM size.
+	if nvidia, err := viaNvidiaSMILinux(); err == nil {
+		gpus = mergeNvidiaGPUs(gpus, nvidia)
+	} else if !isExecNotFound(err) {
+		errs = append(errs, "nvidia-smi: "+err.Error())
 	}
 
-	return nil, errors.New("failed to detect GPU: " + strings.Join(errs, " | "))
+	if len(gpus) == 0 {
+		if len(errs) == 0 {
+			return nil, errors.New("failed to detect GPU")
+		}
+
+		return nil, errors.New("failed to detect GPU: " + strings.Join(errs, " | "))
+	}
+
+	infos := make([]GPUInfo, 0, len(gpus))
+	for _, gpu := range gpus {
+		infos = append(infos, gpu.GPUInfo)
+	}
+
+	return infos, nil
 }
 
-func viaNvidiaSMILinux() ([]GPUInfo, error) {
-	out, err := run("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
+func viaNvidiaSMILinux() ([]nvidiaGPU, error) {
+	const query = "--query-gpu=name,memory.total,pci.bus_id"
+
+	out, err := run("nvidia-smi", query, "--format=csv,noheader,nounits")
 	if err != nil {
 		// Common WSL location if not on PATH
 		if runtime.GOOS == "linux" {
 			if _, statErr := os.Stat("/usr/lib/wsl/lib/nvidia-smi"); statErr == nil {
-				out, err = run("/usr/lib/wsl/lib/nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
+				out, err = run("/usr/lib/wsl/lib/nvidia-smi", query, "--format=csv,noheader,nounits")
 			}
 		}
 	}
@@ -232,17 +262,17 @@ func viaNvidiaSMILinux() ([]GPUInfo, error) {
 		return nil, err
 	}
 
-	return parseNvidiaSMIOutput(out)
+	return parseNvidiaSMIRows(out)
 }
 
-func viaLinuxDRMSysfs() ([]GPUInfo, error) {
+func viaLinuxDRMSysfs() ([]linuxGPU, error) {
 	const drmPath = "/sys/class/drm"
 	ents, err := os.ReadDir(drmPath)
 	if err != nil {
 		return nil, err
 	}
 
-	var gpus []GPUInfo
+	var gpus []linuxGPU
 
 	for _, e := range ents {
 		n := e.Name()
@@ -265,7 +295,16 @@ func viaLinuxDRMSysfs() ([]GPUInfo, error) {
 			memMiB = uint(b / MiB)
 		}
 
-		gpus = append(gpus, GPUInfo{Name: name, Vendor: vendor, Memory: memMiB})
+		// The `device` entry is a symlink to the PCI device, e.g. "../../../0000:01:00.0".
+		slot := ""
+		if target, linkErr := os.Readlink(devDir); linkErr == nil {
+			slot = normalizePCISlot(target)
+		}
+
+		gpus = append(gpus, linuxGPU{
+			GPUInfo: GPUInfo{Name: name, Vendor: vendor, Memory: memMiB},
+			slot:    slot,
+		})
 	}
 
 	if len(gpus) == 0 {
@@ -275,8 +314,8 @@ func viaLinuxDRMSysfs() ([]GPUInfo, error) {
 	return gpus, nil
 }
 
-func viaLinuxLspci() ([]GPUInfo, error) {
-	out, err := run("sh", "-c", "command -v lspci >/dev/null 2>&1 && lspci -nn | egrep -i 'vga|3d|display' || true")
+func viaLinuxLspci() ([]linuxGPU, error) {
+	out, err := run("sh", "-c", "command -v lspci >/dev/null 2>&1 && lspci -Dnn | egrep -i 'vga|3d|display' || true")
 	if err != nil {
 		return nil, err
 	}
@@ -286,23 +325,149 @@ func viaLinuxLspci() ([]GPUInfo, error) {
 		return nil, errors.New("no lspci gpu lines")
 	}
 
-	var gpus []GPUInfo
+	var gpus []linuxGPU
 
 	for _, line := range lines {
-		parts := strings.SplitN(line, ":", 3)
-		desc := line
-		if len(parts) == 3 {
-			desc = strings.TrimSpace(parts[2])
-		}
-
-		gpus = append(gpus, GPUInfo{
-			Name:   desc,
-			Vendor: inferVendor(desc),
-			Memory: 0,
+		slot, desc := parseLspciLine(line)
+		gpus = append(gpus, linuxGPU{
+			GPUInfo: GPUInfo{Name: desc, Vendor: inferVendor(desc), Memory: 0},
+			slot:    slot,
 		})
 	}
 
 	return gpus, nil
+}
+
+// parseLspciLine splits a `lspci -Dnn` line into its PCI address and the device description.
+//
+// Example input:
+//
+//	0000:01:00.0 VGA compatible controller [0300]: NVIDIA Corporation GA102 [GeForce RTX 3090] [10de:2204] (rev a1)
+//
+// which yields the slot "0000:01:00.0" and the description "NVIDIA Corporation GA102 [GeForce RTX 3090] (rev a1)".
+func parseLspciLine(line string) (string, string) {
+	line = strings.TrimSpace(line)
+
+	slot, rest, found := strings.Cut(line, " ")
+	if !found {
+		return "", line
+	}
+
+	// Everything after the device class (e.g. "VGA compatible controller [0300]: ") is the description.
+	desc := rest
+	if _, after, ok := strings.Cut(rest, ": "); ok {
+		desc = after
+	}
+
+	// Drop the "[vendor:device]" ID token; it's noise in a display name and the vendor is inferred from the text.
+	desc = pciIDToken.ReplaceAllString(desc, "")
+	desc = strings.Join(strings.Fields(desc), " ")
+
+	return normalizePCISlot(slot), desc
+}
+
+// mergeLinuxGPUs adds extra GPUs to base, merging entries that share a PCI address instead of duplicating them.
+func mergeLinuxGPUs(base, extra []linuxGPU) []linuxGPU {
+	for _, gpu := range extra {
+		idx := indexBySlot(base, gpu.slot)
+		if idx < 0 {
+			base = append(base, gpu)
+			continue
+		}
+
+		// A readable name ("NVIDIA Corporation GA102 ...") beats the synthetic PCI-ID one from sysfs.
+		if gpu.Name != "" {
+			base[idx].Name = gpu.Name
+		}
+		if isUnknownVendor(base[idx].Vendor) && gpu.Vendor != "" {
+			base[idx].Vendor = gpu.Vendor
+		}
+		if base[idx].Memory == 0 {
+			base[idx].Memory = gpu.Memory
+		}
+	}
+
+	return base
+}
+
+// mergeNvidiaGPUs folds nvidia-smi rows into the GPUs found by the PCI probes, appending the ones they missed. Rows are
+// matched by PCI address when the driver reports one, falling back to the order in which NVIDIA GPUs were detected.
+func mergeNvidiaGPUs(base []linuxGPU, nvidia []nvidiaGPU) []linuxGPU {
+	claimed := make(map[int]bool, len(nvidia))
+
+	for _, gpu := range nvidia {
+		idx := indexBySlot(base, gpu.busID)
+		if idx < 0 {
+			idx = -1
+			for i := range base {
+				if strings.EqualFold(base[i].Vendor, "NVIDIA") && !claimed[i] {
+					idx = i
+					break
+				}
+			}
+		}
+
+		if idx < 0 {
+			base = append(base, linuxGPU{
+				GPUInfo: GPUInfo{Name: gpu.name, Vendor: "NVIDIA", Memory: gpu.memory},
+				slot:    gpu.busID,
+			})
+			continue
+		}
+
+		claimed[idx] = true
+		base[idx].Name = gpu.name
+		base[idx].Vendor = "NVIDIA"
+		base[idx].Memory = gpu.memory
+	}
+
+	return base
+}
+
+func indexBySlot(gpus []linuxGPU, slot string) int {
+	if slot == "" {
+		return -1
+	}
+
+	for i := range gpus {
+		if gpus[i].slot == slot {
+			return i
+		}
+	}
+
+	return -1
+}
+
+// normalizePCISlot brings the PCI addresses reported by sysfs symlinks ("../../../0000:01:00.0"), lspci ("01:00.0" or
+// "0000:01:00.0") and nvidia-smi ("00000000:01:00.0") into the same "0000:01:00.0" form so they can be compared.
+func normalizePCISlot(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if s == "" {
+		return ""
+	}
+
+	if i := strings.LastIndexByte(s, '/'); i >= 0 {
+		s = s[i+1:]
+	}
+
+	parts := strings.Split(s, ":")
+	switch len(parts) {
+	case 2: // bus:device.function, without domain
+		return "0000:" + parts[0] + ":" + parts[1]
+	case 3:
+		domain := parts[0]
+		if len(domain) > 4 { // nvidia-smi pads the domain to 8 hex digits
+			domain = domain[len(domain)-4:]
+		}
+		return strings.Repeat("0", max(0, 4-len(domain))) + domain + ":" + parts[1] + ":" + parts[2]
+	default:
+		return s
+	}
+}
+
+// isUnknownVendor reports whether a vendor string is a raw PCI ID, i.e. vendorFromPCI couldn't name it.
+func isUnknownVendor(vendor string) bool {
+	return vendor == "" || strings.HasPrefix(strings.ToLower(vendor), "0x")
 }
 
 // endregion
@@ -350,12 +515,28 @@ func viaNvidiaSMIWindows() ([]GPUInfo, error) {
 
 // parseNvidiaSMIOutput parses the CSV output from nvidia-smi and returns GPU information.
 func parseNvidiaSMIOutput(out []byte) ([]GPUInfo, error) {
+	rows, err := parseNvidiaSMIRows(out)
+	if err != nil {
+		return nil, err
+	}
+
+	gpus := make([]GPUInfo, 0, len(rows))
+	for _, row := range rows {
+		gpus = append(gpus, GPUInfo{Name: row.name, Vendor: "NVIDIA", Memory: row.memory})
+	}
+
+	return gpus, nil
+}
+
+// parseNvidiaSMIRows parses the CSV output from nvidia-smi. The PCI bus ID is optional: it's only present when it was
+// part of the query, and is left empty otherwise.
+func parseNvidiaSMIRows(out []byte) ([]nvidiaGPU, error) {
 	lines := nonEmptyLines(string(out))
 	if len(lines) == 0 {
 		return nil, errors.New("no output")
 	}
 
-	var gpus []GPUInfo
+	var gpus []nvidiaGPU
 
 	for _, line := range lines {
 		parts := strings.Split(line, ",")
@@ -371,7 +552,12 @@ func parseNvidiaSMIOutput(out []byte) ([]GPUInfo, error) {
 			continue
 		}
 
-		gpus = append(gpus, GPUInfo{Name: name, Vendor: "NVIDIA", Memory: uint(mem64)})
+		busID := ""
+		if len(parts) > 2 {
+			busID = normalizePCISlot(parts[2])
+		}
+
+		gpus = append(gpus, nvidiaGPU{name: name, memory: uint(mem64), busID: busID})
 	}
 
 	if len(gpus) == 0 {
