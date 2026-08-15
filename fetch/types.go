@@ -75,6 +75,10 @@ func (r *Response) Bytes() ([]byte, error) {
 //   - callback: A function that takes three arguments: completed bytes (int64), total bytes (int64),
 //     and progress percentage (float64).
 //
+// The callback always fires one last time when the download ends, so the final call reports the terminal state. That
+// matters for downloads that fail: they never move Downloaded or Progress, and a caller watching only for changes
+// would never hear that they are over.
+//
 // # Returns:
 //   - An error if one occurred during the download process.
 func (r *Response) Track(callback func(completed, total int64, progress float64)) error {
@@ -85,16 +89,14 @@ func (r *Response) Track(callback func(completed, total int64, progress float64)
 	for {
 		select {
 		case <-ticker.C:
+			// While the download runs there is nothing to report unless it moved
 			if r.Downloaded != oldValue {
 				oldValue = r.Downloaded
 				callback(r.Downloaded, r.Size, r.Progress)
 			}
 
 		case <-r.Done:
-			if r.Downloaded != oldValue {
-				oldValue = r.Downloaded
-				callback(r.Downloaded, r.Size, r.Progress)
-			}
+			callback(r.Downloaded, r.Size, r.Progress)
 			return r.Error()
 		}
 	}

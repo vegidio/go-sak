@@ -36,7 +36,7 @@ func TestNewRequest(t *testing.T) {
 			url:         "://invalid-url",
 			filePath:    "/tmp/file.txt",
 			expectError: true,
-			errorMsg:    "invalid download URL",
+			errorMsg:    "failed to create request",
 		},
 		{
 			name:        "relative URL",
@@ -797,4 +797,36 @@ func TestDownloadFile_CancelInterruptsBackoff(t *testing.T) {
 	start := time.Now()
 	assert.Error(t, response.Error())
 	assert.Less(t, time.Since(start), 3*time.Second, "cancelling must interrupt the backoff sleep")
+}
+
+func TestTrack_ReportsTheTerminalStateOfAFailedDownload(t *testing.T) {
+	// A download that fails after transferring something stops moving Downloaded before it ends, so the
+	// ticker reports the final byte count while the download is still running. A Track that only
+	// reported changes would then say nothing at all about the download being over.
+	response := &Response{
+		Request:    &Request{Url: "https://example.com/file.txt"},
+		Downloaded: 100,
+		Size:       1000,
+		Done:       make(chan struct{}),
+		err:        fmt.Errorf("unexpected status: %d", http.StatusForbidden),
+	}
+
+	// Long enough for at least one tick to observe Downloaded before the download ends
+	go func() {
+		time.Sleep(250 * time.Millisecond)
+		close(response.Done)
+	}()
+
+	// A callback seen once the response is complete is the terminal one
+	var terminalCalls int
+	trackErr := response.Track(func(completed, total int64, _ float64) {
+		if response.IsComplete() {
+			terminalCalls++
+			assert.EqualValues(t, 100, completed)
+			assert.EqualValues(t, 1000, total)
+		}
+	})
+
+	assert.Error(t, trackErr)
+	assert.Equal(t, 1, terminalCalls, "Track must always report the terminal state exactly once")
 }

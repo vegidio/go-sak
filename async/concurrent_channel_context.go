@@ -36,7 +36,7 @@ func ConcurrentChannelContext[T any, R any](
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		go func() {
 			defer wg.Done()
 

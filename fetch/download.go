@@ -30,13 +30,13 @@ const maxBackoff = 30 * time.Second
 //   - A Request object containing the URL and file path.
 //   - An error if the request creation fails.
 func (f *Fetch) NewRequest(url string, filePath string, headers map[string]string) (*Request, error) {
-	if err := validateDownloadUrl(url); err != nil {
-		return nil, err
-	}
-
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if err = validateDownloadUrl(req.URL); err != nil {
+		return nil, err
 	}
 
 	for key, value := range f.headers {
@@ -131,9 +131,7 @@ func (f *Fetch) DownloadFile(request *Request) *Response {
 		// A failed download that wrote nothing leaves an empty file behind, because the file is created
 		// before the first request is even sent; clean it up instead of littering the output directory.
 		if response.err != nil && response.Downloaded == 0 && offset == 0 {
-			if info, sErr := file.Stat(); sErr == nil && info.Size() == 0 {
-				_ = os.Remove(request.FilePath)
-			}
+			_ = os.Remove(request.FilePath)
 		}
 	}()
 
@@ -247,11 +245,14 @@ func (f *Fetch) downloadWithRetries(
 			}).Warn("failed to download file; retrying in ", backoff)
 
 			// A plain Sleep here would keep a cancelled download alive for the whole backoff
+			timer := time.NewTimer(backoff)
+
 			select {
 			case <-ctx.Done():
+				timer.Stop()
 				response.err = ctx.Err()
 				return
-			case <-time.After(backoff):
+			case <-timer.C:
 			}
 		}
 
@@ -381,18 +382,13 @@ func (f *Fetch) downloadWithRetries(
 // validateDownloadUrl rejects URLs that could never be downloaded, so the caller finds out immediately
 // instead of after a full round of retries. Relative URLs are the common case: some sites hand out
 // links such as "/r/subreddit", which http.Client rejects with "no Host in request URL" every time.
-func validateDownloadUrl(rawUrl string) error {
-	parsed, err := neturl.Parse(rawUrl)
-	if err != nil {
-		return fmt.Errorf("invalid download URL %q: %w", rawUrl, err)
+func validateDownloadUrl(u *neturl.URL) error {
+	if u.Scheme == "" || u.Host == "" {
+		return fmt.Errorf("invalid download URL %q: not an absolute http(s) URL", u)
 	}
 
-	if parsed.Scheme == "" || parsed.Host == "" {
-		return fmt.Errorf("invalid download URL %q: not an absolute http(s) URL", rawUrl)
-	}
-
-	if parsed.Scheme != "http" && parsed.Scheme != "https" {
-		return fmt.Errorf("invalid download URL %q: unsupported scheme %q", rawUrl, parsed.Scheme)
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("invalid download URL %q: unsupported scheme %q", u, u.Scheme)
 	}
 
 	return nil
