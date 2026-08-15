@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"os"
 	"sync"
 	"time"
@@ -13,6 +14,10 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/zeebo/blake3"
 )
+
+// maxBackoff caps the wait between download attempts; the raw fibonacci sequence reaches 89s on the
+// 10th retry, which stalls a queue for minutes on a URL that will never succeed.
+const maxBackoff = 30 * time.Second
 
 // NewRequest creates a new download request with the specified URL and file path.
 //
@@ -25,6 +30,10 @@ import (
 //   - A Request object containing the URL and file path.
 //   - An error if the request creation fails.
 func (f *Fetch) NewRequest(url string, filePath string, headers map[string]string) (*Request, error) {
+	if err := validateDownloadUrl(url); err != nil {
+		return nil, err
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -118,6 +127,14 @@ func (f *Fetch) DownloadFile(request *Request) *Response {
 
 		sum := hasher.Sum(nil)
 		response.Hash = hex.EncodeToString(sum)
+
+		// A failed download that wrote nothing leaves an empty file behind, because the file is created
+		// before the first request is even sent; clean it up instead of littering the output directory.
+		if response.err != nil && response.Downloaded == 0 && offset == 0 {
+			if info, sErr := file.Stat(); sErr == nil && info.Size() == 0 {
+				_ = os.Remove(request.FilePath)
+			}
+		}
 	}()
 
 	return response
@@ -221,7 +238,7 @@ func (f *Fetch) downloadWithRetries(
 		}
 
 		if attempt > 0 {
-			backoff := time.Duration(fibonacci(attempt+1)) * time.Second
+			backoff := min(time.Duration(fibonacci(attempt+1))*time.Second, maxBackoff)
 
 			log.WithFields(log.Fields{
 				"attempt": attempt,
@@ -229,7 +246,13 @@ func (f *Fetch) downloadWithRetries(
 				"url":     response.Request.Url,
 			}).Warn("failed to download file; retrying in ", backoff)
 
-			time.Sleep(backoff)
+			// A plain Sleep here would keep a cancelled download alive for the whole backoff
+			select {
+			case <-ctx.Done():
+				response.err = ctx.Err()
+				return
+			case <-time.After(backoff):
+			}
 		}
 
 		isRangeReq := offset > 0
@@ -243,6 +266,12 @@ func (f *Fetch) downloadWithRetries(
 		resp, err = f.httpClient.Do(response.Request.httpReq)
 		if err != nil {
 			response.err = fmt.Errorf("request error: %w", err)
+
+			if ctx.Err() != nil {
+				response.err = ctx.Err()
+				return
+			}
+
 			continue
 		}
 
@@ -280,11 +309,18 @@ func (f *Fetch) downloadWithRetries(
 			break
 		}
 
-		// If we get an error (anything that is not 2xx), then we abort this loop and go to the next attempt.
-		// We don't do that for HTTP 404 and 410, because those are cases where we know the file is not there.
-		if resp.StatusCode != 404 && resp.StatusCode != 410 && (resp.StatusCode < 200 || resp.StatusCode >= 300) {
+		// Anything that is not 2xx is a failure. Retrying only makes sense when the server told us the
+		// problem is temporary; a 403 or a 404 will answer the same way ten times in a row, and retrying
+		// it just burns minutes of backoff before failing anyway.
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			response.StatusCode = resp.StatusCode
 			response.err = fmt.Errorf("unexpected status: %d", resp.StatusCode)
 			resp.Body.Close()
+
+			if !isRetryableStatus(resp.StatusCode) {
+				return
+			}
+
 			continue
 		}
 
@@ -340,6 +376,37 @@ func (f *Fetch) downloadWithRetries(
 		resp.Body.Close()
 		break
 	}
+}
+
+// validateDownloadUrl rejects URLs that could never be downloaded, so the caller finds out immediately
+// instead of after a full round of retries. Relative URLs are the common case: some sites hand out
+// links such as "/r/subreddit", which http.Client rejects with "no Host in request URL" every time.
+func validateDownloadUrl(rawUrl string) error {
+	parsed, err := neturl.Parse(rawUrl)
+	if err != nil {
+		return fmt.Errorf("invalid download URL %q: %w", rawUrl, err)
+	}
+
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return fmt.Errorf("invalid download URL %q: not an absolute http(s) URL", rawUrl)
+	}
+
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("invalid download URL %q: unsupported scheme %q", rawUrl, parsed.Scheme)
+	}
+
+	return nil
+}
+
+// isRetryableStatus reports whether it's worth sending the request again. Server-side failures and the
+// explicit "slow down / try later" statuses are; every other client error is permanent.
+func isRetryableStatus(statusCode int) bool {
+	switch statusCode {
+	case http.StatusRequestTimeout, http.StatusTooEarly, http.StatusTooManyRequests:
+		return true
+	}
+
+	return statusCode >= 500
 }
 
 func fibonacci(n int) int {

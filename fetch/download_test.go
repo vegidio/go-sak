@@ -36,7 +36,21 @@ func TestNewRequest(t *testing.T) {
 			url:         "://invalid-url",
 			filePath:    "/tmp/file.txt",
 			expectError: true,
-			errorMsg:    "failed to create request",
+			errorMsg:    "invalid download URL",
+		},
+		{
+			name:        "relative URL",
+			url:         "/r/some-subreddit",
+			filePath:    "/tmp/file.txt",
+			expectError: true,
+			errorMsg:    "not an absolute http(s) URL",
+		},
+		{
+			name:        "unsupported scheme",
+			url:         "ftp://example.com/file.txt",
+			filePath:    "/tmp/file.txt",
+			expectError: true,
+			errorMsg:    "unsupported scheme",
 		},
 		{
 			name:     "empty headers",
@@ -128,10 +142,10 @@ func TestDownloadFile(t *testing.T) {
 			expectedError: true,
 		},
 		{
-			name:           "not found",
-			serverContent:  "",
-			serverStatus:   http.StatusNotFound,
-			expectedStatus: http.StatusNotFound,
+			name:          "not found",
+			serverContent: "",
+			serverStatus:  http.StatusNotFound,
+			expectedError: true,
 		},
 	}
 
@@ -683,4 +697,104 @@ func TestBlake3FileHash(t *testing.T) {
 	// Verify the hash matches the expected value
 	assert.Equal(t, expectedHash, actualHash)
 	assert.Equal(t, testContent, string(fileContent))
+}
+
+func TestDownloadFile_DoesNotRetryPermanentStatus(t *testing.T) {
+	tests := []struct {
+		name             string
+		status           int
+		expectedAttempts int
+	}{
+		{name: "forbidden is permanent", status: http.StatusForbidden, expectedAttempts: 1},
+		{name: "not found is permanent", status: http.StatusNotFound, expectedAttempts: 1},
+		{name: "gone is permanent", status: http.StatusGone, expectedAttempts: 1},
+		{name: "too many requests is retried", status: http.StatusTooManyRequests, expectedAttempts: 3},
+		{name: "server error is retried", status: http.StatusInternalServerError, expectedAttempts: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var mu sync.Mutex
+			attempts := 0
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				mu.Lock()
+				attempts++
+				mu.Unlock()
+				w.WriteHeader(tt.status)
+			}))
+			defer server.Close()
+
+			tempDir, err := os.MkdirTemp("", "download_permanent_test")
+			require.NoError(t, err)
+			defer os.RemoveAll(tempDir)
+
+			filePath := filepath.Join(tempDir, "file.txt")
+
+			// 2 retries on top of the first attempt
+			f := New(nil, 2, false)
+			req, err := f.NewRequest(server.URL, filePath, nil)
+			require.NoError(t, err)
+
+			downloadErr := f.DownloadFile(req).Error()
+
+			assert.Error(t, downloadErr)
+			assert.Contains(t, downloadErr.Error(), fmt.Sprintf("unexpected status: %d", tt.status))
+
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Equal(t, tt.expectedAttempts, attempts)
+		})
+	}
+}
+
+func TestDownloadFile_RemovesEmptyFileOnFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer server.Close()
+
+	tempDir, err := os.MkdirTemp("", "download_cleanup_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	filePath := filepath.Join(tempDir, "file.txt")
+
+	f := New(nil, 0, false)
+	req, err := f.NewRequest(server.URL, filePath, nil)
+	require.NoError(t, err)
+
+	assert.Error(t, f.DownloadFile(req).Error())
+
+	_, statErr := os.Stat(filePath)
+	assert.True(t, os.IsNotExist(statErr), "a failed download should not leave an empty file behind")
+}
+
+func TestDownloadFile_CancelInterruptsBackoff(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	tempDir, err := os.MkdirTemp("", "download_cancel_test")
+	require.NoError(t, err)
+	defer os.RemoveAll(tempDir)
+
+	filePath := filepath.Join(tempDir, "file.txt")
+
+	// Enough retries that the un-cancelled download would back off for minutes
+	f := New(nil, 10, false)
+	req, err := f.NewRequest(server.URL, filePath, nil)
+	require.NoError(t, err)
+
+	response := f.DownloadFile(req)
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		response.Cancel()
+	}()
+
+	start := time.Now()
+	assert.Error(t, response.Error())
+	assert.Less(t, time.Since(start), 3*time.Second, "cancelling must interrupt the backoff sleep")
 }
