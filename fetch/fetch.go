@@ -39,7 +39,7 @@ func New(headers map[string]string, retries int, disableHttp2 bool) *Fetch {
 
 	f := resty.New()
 	f.SetRedirectPolicy(resty.FlexibleRedirectPolicy(maxRedirects), resty.RedirectPolicyFunc(func(req *http.Request, via []*http.Request) error {
-		if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme == "http" {
+		if isUnsafeDowngrade(req, via) {
 			return fmt.Errorf("refusing redirect from https to http: %s", req.URL)
 		}
 

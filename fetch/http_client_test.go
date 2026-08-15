@@ -63,12 +63,24 @@ func TestSafeCheckRedirect(t *testing.T) {
 		assert.Contains(t, err.Error(), "stopped after")
 	})
 
-	t.Run("rejects https to http downgrade", func(t *testing.T) {
-		req := &http.Request{URL: mustURL("http://example.com/b")}
+	t.Run("rejects https to http downgrade to another host", func(t *testing.T) {
+		req := &http.Request{URL: mustURL("http://attacker.example/b")}
 		via := []*http.Request{{URL: mustURL("https://example.com/a")}}
 		err := safeCheckRedirect(req, via)
 		require.Error(t, err)
 		assert.True(t, strings.Contains(err.Error(), "https to http"))
+	})
+
+	t.Run("allows https to http downgrade on the same host", func(t *testing.T) {
+		req := &http.Request{URL: mustURL("http://example.com/b")}
+		via := []*http.Request{{URL: mustURL("https://example.com/a")}}
+		assert.NoError(t, safeCheckRedirect(req, via))
+	})
+
+	t.Run("ignores the port when comparing hosts", func(t *testing.T) {
+		req := &http.Request{URL: mustURL("http://example.com:8080/b")}
+		via := []*http.Request{{URL: mustURL("https://example.com/a")}}
+		assert.NoError(t, safeCheckRedirect(req, via))
 	})
 
 	t.Run("allows http to https upgrade", func(t *testing.T) {

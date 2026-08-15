@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -17,11 +18,23 @@ func safeCheckRedirect(req *http.Request, via []*http.Request) error {
 		return fmt.Errorf("stopped after %d redirects", maxRedirects)
 	}
 
-	if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme == "http" {
+	if isUnsafeDowngrade(req, via) {
 		return fmt.Errorf("refusing redirect from https to http: %s", req.URL)
 	}
 
 	return nil
+}
+
+// isUnsafeDowngrade reports whether a redirect drops TLS on the way to a *different* host. A site that
+// downgrades a redirect to itself only exposes its own traffic, and refusing that breaks a fair number
+// of otherwise working sites; being sent to plaintext on somebody else's host is the case worth
+// blocking.
+func isUnsafeDowngrade(req *http.Request, via []*http.Request) bool {
+	if len(via) == 0 || via[0].URL.Scheme != "https" || req.URL.Scheme != "http" {
+		return false
+	}
+
+	return !strings.EqualFold(req.URL.Hostname(), via[0].URL.Hostname())
 }
 
 type timeoutConn struct {
