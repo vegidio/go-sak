@@ -48,4 +48,7 @@ func (m *MemoryStore) Set(_ context.Context, key string, value []byte, ttl time.
 	return nil
 }
 
+// Cleanup is a no-op. Ristretto evicts expired entries on its own and holds nothing on disk to reclaim.
+func (m *MemoryStore) Cleanup(_ context.Context) error { return nil }
+
 func (m *MemoryStore) Close() error { m.c.Close(); return nil }

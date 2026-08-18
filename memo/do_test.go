@@ -303,6 +303,10 @@ func (m *mockStore) Set(ctx context.Context, key string, value []byte, ttl time.
 	return nil
 }
 
+func (m *mockStore) Cleanup(ctx context.Context) error {
+	return nil
+}
+
 func (m *mockStore) Close() error {
 	return nil
 }

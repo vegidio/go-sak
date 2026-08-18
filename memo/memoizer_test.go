@@ -26,6 +26,11 @@ func (m *MockStore) Set(ctx context.Context, key string, value []byte, ttl time.
 	return args.Error(0)
 }
 
+func (m *MockStore) Cleanup(ctx context.Context) error {
+	args := m.Called(ctx)
+	return args.Error(0)
+}
+
 func (m *MockStore) Close() error {
 	args := m.Called()
 	return args.Error(0)

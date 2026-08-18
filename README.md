@@ -210,15 +210,21 @@ Executes a memoized computation with the given key and TTL. Checks cache first, 
 
 #### `KeyFrom(parts ...any) string`
 
-Generates a SHA-256 hash key from the provided parts using gob encoding. Useful for creating consistent cache keys from multiple values.
+Generates a SHA-256 hash key from the provided parts using JSON encoding. Useful for creating consistent cache keys from multiple values. Parameter order is significant.
 
 #### `CacheOpts`
 
 Configuration options for cache stores. Contains `MaxEntries` (maximum number of cached entries) and `MaxCapacity` (maximum capacity in bytes). Used when creating memory or disk-based memoizers.
 
+#### `Cleanup(ctx context.Context) error`
+
+Reclaims the disk space still held by entries whose TTL has expired. Disk-backed memoizers run this automatically in the background when they are created; call it directly to reclaim space at a moment of your choosing. No-op for memory-only memoizers.
+
 #### `Close() error`
 
 Closes the Memoizer and releases any resources held by the underlying store. Should be called when the Memoizer is no longer needed.
+
+See [memo/README.md](memo/README.md) for a fuller guide to this package.
 
 ---
 

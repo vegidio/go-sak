@@ -205,13 +205,10 @@ func TestNewMemoryDisk(t *testing.T) {
 		err2 := closeFunc()
 		err3 := closeFunc()
 
-		// First close should succeed, subsequent calls behavior depends on implementation
-		// but they shouldn't panic
+		// Closing is idempotent: every call reports the same result rather than failing on the second
 		assert.NoError(t, err1)
-		// err2 and err3 might be errors or nil depending on implementation
-		// but the important thing is they don't panic
-		_ = err2
-		_ = err3
+		assert.NoError(t, err2)
+		assert.NoError(t, err3)
 	})
 
 	t.Run("memory store creation failure is handled gracefully", func(t *testing.T) {

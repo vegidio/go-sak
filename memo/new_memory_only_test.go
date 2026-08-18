@@ -1,6 +1,7 @@
 package memo
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -109,5 +110,17 @@ func TestNewMemoryOnly(t *testing.T) {
 		// Clean up
 		err = memoizer.Close()
 		assert.NoError(t, err)
+	})
+}
+
+func TestMemoryOnlyCleanup(t *testing.T) {
+	t.Run("cleanup on a memory-only memoizer is a no-op", func(t *testing.T) {
+		// Arrange
+		memoizer, err := NewMemoryOnly(internal.CacheOpts{})
+		require.NoError(t, err)
+		defer memoizer.Close()
+
+		// Act & Assert
+		assert.NoError(t, memoizer.Cleanup(context.Background()))
 	})
 }

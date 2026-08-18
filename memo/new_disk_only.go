@@ -15,6 +15,10 @@ import "github.com/vegidio/go-sak/memo/internal"
 // Returns a pointer to the newly created Memoizer configured with disk storage, or an error if the disk store
 // initialization fails (e.g., due to permission issues or invalid directory path).
 //
+// A background sweep starts as soon as the store opens, reclaiming the disk space held by entries that expired during
+// previous runs. It doesn't delay this call, and Close interrupts it rather than waiting for it to finish. Use
+// Memoizer.Cleanup to trigger the same sweep at a moment of your choosing.
+//
 // # Example:
 //
 //	opts := CacheOpts{

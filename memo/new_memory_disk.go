@@ -23,6 +23,10 @@ import (
 // The function initializes both stores and ensures proper cleanup if either fails. The returned cleanup function should
 // be deferred or called when the memoizer is no longer needed.
 //
+// A background sweep starts as soon as the disk tier opens, reclaiming the space held by entries that expired during
+// previous runs. It doesn't delay this call, and the returned cleanup function interrupts it rather than waiting for it
+// to finish. Use Memoizer.Cleanup to trigger the same sweep at a moment of your choosing.
+//
 // # Example:
 //
 //	memoizer, cleanup, err := NewMemoryDisk("/tmp/cache", CacheOpts{}, time.Hour)
