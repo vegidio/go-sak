@@ -30,9 +30,13 @@ func createTestZip(t *testing.T, files map[string]string, dirs []string) string 
 		require.NoError(t, err)
 	}
 
-	// Add files
+	// Add files. CreateHeader with an explicit SetMode is needed because zip.Writer.Create records no Unix mode
+	// at all, so every entry would fall back to the extractor's default instead of exercising mode preservation.
+	// 0o600 is used because it survives umask 022, 002 and 077 alike.
 	for filename, content := range files {
-		writer, err := zipWriter.Create(filename)
+		header := &zip.FileHeader{Name: filename, Method: zip.Deflate}
+		header.SetMode(0o600)
+		writer, err := zipWriter.CreateHeader(header)
 		require.NoError(t, err)
 		_, err = writer.Write([]byte(content))
 		require.NoError(t, err)
@@ -89,10 +93,10 @@ func TestUnzip(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, expectedContent, string(content))
 
-			// Check file permissions (should be 0755 as set by the function)
+			// Permissions come from the archive, not from a hardcoded mode
 			info, err := os.Stat(fullPath)
 			require.NoError(t, err)
-			assert.Equal(t, os.FileMode(0755), info.Mode().Perm())
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
 		}
 
 		// Verify extracted directories

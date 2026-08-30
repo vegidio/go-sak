@@ -11,7 +11,7 @@ import (
 
 func TestNewTelemetry(t *testing.T) {
 	t.Run("creates telemetry with enabled logging", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -23,12 +23,12 @@ func TestNewTelemetry(t *testing.T) {
 		defer telemetry.Close()
 
 		assert.NotNil(t, telemetry.logger)
-		assert.NotNil(t, telemetry.prefilled)
+		assert.NotNil(t, telemetry.prefilled())
 		assert.NotNil(t, telemetry.cleanup)
 	})
 
 	t.Run("creates telemetry with disabled logging", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -40,13 +40,13 @@ func TestNewTelemetry(t *testing.T) {
 		defer telemetry.Close()
 
 		assert.NotNil(t, telemetry.logger)
-		assert.NotNil(t, telemetry.prefilled)
+		assert.NotNil(t, telemetry.prefilled())
 		assert.NotNil(t, telemetry.cleanup)
 	})
 
 	t.Run("prefilled fields contain version", func(t *testing.T) {
 		version := "2.3.4"
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			version,
@@ -56,11 +56,11 @@ func TestNewTelemetry(t *testing.T) {
 		)
 		defer telemetry.Close()
 
-		assert.Equal(t, version, telemetry.prefilled["version"])
+		assert.Equal(t, version, telemetry.prefilled()["version"])
 	})
 
 	t.Run("prefilled fields contain session id", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -70,7 +70,7 @@ func TestNewTelemetry(t *testing.T) {
 		)
 		defer telemetry.Close()
 
-		sessionID, exists := telemetry.prefilled["session.id"]
+		sessionID, exists := telemetry.prefilled()["session.id"]
 		assert.True(t, exists)
 		assert.NotEmpty(t, sessionID)
 
@@ -81,7 +81,7 @@ func TestNewTelemetry(t *testing.T) {
 	})
 
 	t.Run("prefilled fields contain machine info", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -92,7 +92,7 @@ func TestNewTelemetry(t *testing.T) {
 		defer telemetry.Close()
 
 		// Machine ID should exist and be lowercase
-		machineID, exists := telemetry.prefilled["machine.id"]
+		machineID, exists := telemetry.prefilled()["machine.id"]
 		assert.True(t, exists)
 		assert.NotEmpty(t, machineID)
 		machineIDStr, ok := machineID.(string)
@@ -100,10 +100,10 @@ func TestNewTelemetry(t *testing.T) {
 		assert.Equal(t, strings.ToLower(machineIDStr), machineIDStr)
 
 		// OS should match runtime.GOOS
-		assert.Equal(t, runtime.GOOS, telemetry.prefilled["machine.os"])
+		assert.Equal(t, runtime.GOOS, telemetry.prefilled()["machine.os"])
 
 		// Arch should match runtime.GOARCH
-		assert.Equal(t, runtime.GOARCH, telemetry.prefilled["machine.arch"])
+		assert.Equal(t, runtime.GOARCH, telemetry.prefilled()["machine.arch"])
 	})
 
 	t.Run("handles different environments", func(t *testing.T) {
@@ -113,7 +113,7 @@ func TestNewTelemetry(t *testing.T) {
 		}
 
 		for _, env := range environments {
-			telemetry := NewTelemetry(
+			telemetry, _ := NewTelemetry(
 				"localhost:4318",
 				"test-service",
 				"1.0.0",
@@ -127,7 +127,7 @@ func TestNewTelemetry(t *testing.T) {
 	})
 
 	t.Run("handles empty service name", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"",
 			"1.0.0",
@@ -140,7 +140,7 @@ func TestNewTelemetry(t *testing.T) {
 	})
 
 	t.Run("handles empty version", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"",
@@ -151,11 +151,11 @@ func TestNewTelemetry(t *testing.T) {
 		require.NotNil(t, telemetry)
 		defer telemetry.Close()
 
-		assert.Equal(t, "", telemetry.prefilled["version"])
+		assert.Equal(t, "", telemetry.prefilled()["version"])
 	})
 
 	t.Run("handles empty endpoint", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"",
 			"test-service",
 			"1.0.0",
@@ -170,7 +170,7 @@ func TestNewTelemetry(t *testing.T) {
 
 func TestRenewSession(t *testing.T) {
 	t.Run("changes session id", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -180,18 +180,18 @@ func TestRenewSession(t *testing.T) {
 		)
 		defer telemetry.Close()
 
-		originalSessionID := telemetry.prefilled["session.id"]
+		originalSessionID := telemetry.prefilled()["session.id"]
 		assert.NotEmpty(t, originalSessionID)
 
 		telemetry.RenewSession()
 
-		newSessionID := telemetry.prefilled["session.id"]
+		newSessionID := telemetry.prefilled()["session.id"]
 		assert.NotEmpty(t, newSessionID)
 		assert.NotEqual(t, originalSessionID, newSessionID)
 	})
 
 	t.Run("generates valid uuid format", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -203,14 +203,14 @@ func TestRenewSession(t *testing.T) {
 
 		telemetry.RenewSession()
 
-		sessionID, ok := telemetry.prefilled["session.id"].(string)
+		sessionID, ok := telemetry.prefilled()["session.id"].(string)
 		require.True(t, ok)
 		assert.Equal(t, 36, len(sessionID))
 		assert.Contains(t, sessionID, "-")
 	})
 
 	t.Run("multiple renewals generate different ids", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -225,7 +225,7 @@ func TestRenewSession(t *testing.T) {
 
 		for i := 0; i < iterations; i++ {
 			telemetry.RenewSession()
-			sessionID := telemetry.prefilled["session.id"].(string)
+			sessionID := telemetry.prefilled()["session.id"].(string)
 			sessionIDs[sessionID] = true
 		}
 
@@ -234,7 +234,7 @@ func TestRenewSession(t *testing.T) {
 	})
 
 	t.Run("preserves other prefilled fields", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -244,21 +244,21 @@ func TestRenewSession(t *testing.T) {
 		)
 		defer telemetry.Close()
 
-		version := telemetry.prefilled["version"]
-		machineID := telemetry.prefilled["machine.id"]
-		machineOS := telemetry.prefilled["machine.os"]
+		version := telemetry.prefilled()["version"]
+		machineID := telemetry.prefilled()["machine.id"]
+		machineOS := telemetry.prefilled()["machine.os"]
 
 		telemetry.RenewSession()
 
-		assert.Equal(t, version, telemetry.prefilled["version"])
-		assert.Equal(t, machineID, telemetry.prefilled["machine.id"])
-		assert.Equal(t, machineOS, telemetry.prefilled["machine.os"])
+		assert.Equal(t, version, telemetry.prefilled()["version"])
+		assert.Equal(t, machineID, telemetry.prefilled()["machine.id"])
+		assert.Equal(t, machineOS, telemetry.prefilled()["machine.os"])
 	})
 }
 
 func TestClose(t *testing.T) {
 	t.Run("calls cleanup function when enabled", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -275,7 +275,7 @@ func TestClose(t *testing.T) {
 	})
 
 	t.Run("calls cleanup function when disabled", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -291,7 +291,7 @@ func TestClose(t *testing.T) {
 	})
 
 	t.Run("multiple close calls do not panic", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"test-service",
 			"1.0.0",
@@ -375,7 +375,7 @@ func TestInitLogger(t *testing.T) {
 
 func TestTelemetryIntegration(t *testing.T) {
 	t.Run("full lifecycle with disabled logging", func(t *testing.T) {
-		telemetry := NewTelemetry(
+		telemetry, _ := NewTelemetry(
 			"localhost:4318",
 			"integration-test",
 			"1.0.0",
@@ -387,12 +387,12 @@ func TestTelemetryIntegration(t *testing.T) {
 
 		// Verify initial state
 		assert.NotNil(t, telemetry.logger)
-		assert.NotEmpty(t, telemetry.prefilled)
+		assert.NotEmpty(t, telemetry.prefilled())
 
 		// Renew session
-		originalSession := telemetry.prefilled["session.id"]
+		originalSession := telemetry.prefilled()["session.id"]
 		telemetry.RenewSession()
-		assert.NotEqual(t, originalSession, telemetry.prefilled["session.id"])
+		assert.NotEqual(t, originalSession, telemetry.prefilled()["session.id"])
 
 		// Close
 		assert.NotPanics(t, func() {

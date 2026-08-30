@@ -2,123 +2,91 @@ package fs
 
 import (
 	"archive/tar"
-	"bufio"
-	"fmt"
+	"errors"
 	"io"
+	"iter"
 	"os"
-	"path/filepath"
 
 	"github.com/ulikunitz/xz"
 )
 
 // UntarXz extracts all files and directories from a TAR.XZ archive to a target directory. It creates the target
-// directory if it doesn't exist and preserves the directory structure from the archive.
+// directory if it doesn't exist and preserves the directory structure from the archive, including symbolic links.
 //
-// The function implements security measures to prevent path traversal attacks by:
-//   - Rejecting absolute paths in archive entries
-//   - Preventing path traversal attacks using ".." segments
-//   - Normalizing path separators to handle both forward slashes and backslashes
-//   - Validating that extracted files remain within the target directory
-//   - Validating that symbolic link targets remain within the target directory
+// Extraction is confined to targetDirectory by an os.Root, so neither a hostile entry name nor a chain of symbolic
+// links planted by earlier entries in the archive can write outside it. Entry names that are absolute, that escape the
+// root, or that name a reserved Windows device are rejected before anything is created.
 //
 // # Parameters:
 //   - tarXzPath: Path to the TAR.XZ file to extract
 //   - targetDirectory: Destination directory where files will be extracted
+//   - opts: Optional limits and overrides; see ExtractOption
 //
 // # Returns an error if:
 //   - The TAR.XZ file cannot be opened or read
 //   - The target directory cannot be created
-//   - Any archive entry contains an illegal path (absolute or traversal)
+//   - Any archive entry contains an illegal path (wrapping ErrIllegalPath)
+//   - Any symbolic link points outside the target directory (wrapping ErrIllegalSymlink)
+//   - The archive exceeds a configured limit (wrapping ErrLimitExceeded)
 //   - File extraction fails due to I/O errors or permission issues
 //
-// All extracted files preserve their original permissions from the archive.
-func UntarXz(tarXzPath, targetDirectory string) error {
-	// Open the tar.xz file
+// Extracted files keep the permission bits recorded in the archive, subject to the process umask; setuid, setgid and
+// sticky bits are always stripped. Use WithFileMode to override the mode instead.
+func UntarXz(tarXzPath, targetDirectory string, opts ...ExtractOption) error {
 	f, err := os.Open(tarXzPath)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
 
-	// Create XZ reader
 	xzReader, err := xz.NewReader(f)
 	if err != nil {
 		return err
 	}
 
-	// Create a tar reader
-	tarReader := tar.NewReader(xzReader)
-
-	// Ensure the destination directory exists
-	if err = os.MkdirAll(targetDirectory, 0o755); err != nil {
-		return err
-	}
-
-	// Iterate through each file in the tar archive
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break // End of archive
-		}
-		if err != nil {
-			return err
-		}
-
-		fpath, err := sanitizeArchivePath(header.Name, targetDirectory)
-		if err != nil {
-			return err
-		}
-
-		// Handle different file types
-		switch header.Typeflag {
-		case tar.TypeDir:
-			// Create directory
-			if err = os.MkdirAll(fpath, os.FileMode(header.Mode)); err != nil {
-				return err
-			}
-
-		case tar.TypeReg:
-			// Ensure the parent directory exists
-			if err = os.MkdirAll(filepath.Dir(fpath), 0o755); err != nil {
-				return err
-			}
-
-			// Create the destination file
-			outFile, fErr := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(header.Mode))
-			if fErr != nil {
-				return fErr
-			}
-
-			// Use buffered writer for better performance with large files
-			bufWriter := bufio.NewWriterSize(outFile, 1024*1024) // 1MB buffer
-
-			// Copy file contents from the tar archive to destination file
-			if _, err = io.Copy(bufWriter, tarReader); err != nil {
-				outFile.Close()
-				return err
-			}
-
-			// Flush the buffer before closing
-			if err = bufWriter.Flush(); err != nil {
-				outFile.Close()
-				return err
-			}
-			outFile.Close()
-
-		case tar.TypeSymlink:
-			if err = sanitizeArchiveSymlink(fpath, header.Linkname, targetDirectory); err != nil {
-				return fmt.Errorf("illegal symlink target: %s -> %s", header.Name, header.Linkname)
-			}
-
-			if err = os.Symlink(header.Linkname, fpath); err != nil {
-				return err
-			}
-
-		default:
-			// Skip other types (block devices, char devices, FIFOs, etc.)
-			continue
-		}
-	}
-
-	return nil
+	return extractArchive(tarEntries(tar.NewReader(xzReader)), targetDirectory, newExtractConfig(opts))
 }
+
+// region - Private functions
+
+// tarEntries adapts a streaming tar archive to the shared extraction core. Each entry's body is only readable until
+// the iterator advances, which is exactly the archiveEntry contract.
+func tarEntries(tr *tar.Reader) iter.Seq2[archiveEntry, error] {
+	return func(yield func(archiveEntry, error) bool) {
+		for {
+			h, err := tr.Next()
+			if errors.Is(err, io.EOF) {
+				return
+			}
+			if err != nil {
+				yield(archiveEntry{}, err)
+				return
+			}
+
+			// Hard links, devices, FIFOs and the GNU/PAX metadata entries are skipped. This has to be
+			// decided on Typeflag: FileInfo().Mode() reports a hard link as a plain regular file, which
+			// would create a bogus empty file in its place.
+			switch h.Typeflag {
+			case tar.TypeReg, tar.TypeDir, tar.TypeSymlink:
+			default:
+				continue
+			}
+
+			e := archiveEntry{
+				Name: h.Name,
+				// FileInfo().Mode() decodes the raw POSIX mode, where setuid is 0o4000 rather than
+				// where Go's FileMode keeps it.
+				Mode:       h.FileInfo().Mode(),
+				Size:       h.Size,
+				LinkTarget: h.Linkname,
+				Open:       func() (io.ReadCloser, error) { return io.NopCloser(tr), nil },
+			}
+
+			if !yield(e, nil) {
+				return
+			}
+		}
+	}
+}
+
+// endregion

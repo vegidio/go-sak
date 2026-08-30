@@ -8,9 +8,12 @@ import "github.com/vegidio/go-sak/memo/internal"
 // The directory parameter specifies the path where cached data will be stored. If the directory doesn't exist, it will
 // be created automatically.
 //
-// The opts parameter allows customization of cache behavior:
-//   - MaxEntries: maximum number of entries to store (defaults to 1,000,000 if not specified)
-//   - MaxCapacity: maximum storage capacity in bytes (defaults to 1 GiB if not specified)
+// The opts parameter tunes the store's sizing. Both fields are hints rather than hard limits and are clamped to what
+// Badger accepts, so neither can prevent the store from opening:
+//   - MaxEntries: entries per value-log file, which shapes how often those files roll over (defaults to 1,000,000)
+//   - MaxCapacity: the value-log file size, clamped to [1 MiB, 2 GiB) (defaults to 1 GiB)
+//
+// Neither option caps the cache on disk. Bound its growth with entry TTLs and Memoizer.Cleanup instead.
 //
 // Returns a pointer to the newly created Memoizer configured with disk storage, or an error if the disk store
 // initialization fails (e.g., due to permission issues or invalid directory path).

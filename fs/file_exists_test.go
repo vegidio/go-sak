@@ -104,3 +104,33 @@ func TestFileExists(t *testing.T) {
 		assert.True(t, result)
 	})
 }
+
+func TestFileExists_UnreadableParent(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses directory permissions")
+	}
+
+	// os.Stat returns a nil FileInfo for EACCES just as it does for ENOENT. Only the latter used to be handled, so
+	// this call dereferenced nil and panicked.
+	dir := t.TempDir()
+	secret := filepath.Join(dir, "secret")
+	require.NoError(t, os.Mkdir(secret, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(secret, "f"), []byte("x"), 0o644))
+	require.NoError(t, os.Chmod(secret, 0o000))
+	t.Cleanup(func() { _ = os.Chmod(secret, 0o755) })
+
+	assert.NotPanics(t, func() {
+		assert.False(t, FileExists(filepath.Join(secret, "f")))
+	})
+}
+
+func TestFileExists_PathComponentIsNotADirectory(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "regular")
+	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+
+	// ENOTDIR is another error that yields a nil FileInfo.
+	assert.NotPanics(t, func() {
+		assert.False(t, FileExists(filepath.Join(file, "child")))
+	})
+}

@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type CPUInfo struct {
@@ -18,25 +17,16 @@ type CPUInfo struct {
 
 // GetCPUInfo returns the CPU model/name and the number of logical cores on Linux, macOS and Windows.
 func GetCPUInfo() (CPUInfo, error) {
-	var cpu CPUInfo
-	var err error
-	var wg sync.WaitGroup
-
-	wg.Go(func() {
-		switch runtime.GOOS {
-		case "linux":
-			cpu, err = linuxCPUInfo()
-		case "darwin":
-			cpu, err = macCPUInfo()
-		case "windows":
-			cpu, err = windowsCPUInfo()
-		default:
-			cpu, err = CPUInfo{}, errors.New("unsupported OS: "+runtime.GOOS)
-		}
-	})
-
-	wg.Wait()
-	return cpu, err
+	switch runtime.GOOS {
+	case "linux":
+		return linuxCPUInfo()
+	case "darwin":
+		return macCPUInfo()
+	case "windows":
+		return windowsCPUInfo()
+	default:
+		return CPUInfo{}, errors.New("unsupported OS: " + runtime.GOOS)
+	}
 }
 
 // region - Linux
@@ -71,8 +61,8 @@ func parseCPUNameFromProcInfo() string {
 	// ARM: sometimes "Hardware\t: ..." or "Processor\t: ..."
 	for _, line := range strings.Split(string(b), "\n") {
 		if strings.HasPrefix(line, "model name") || strings.HasPrefix(line, "Processor") || strings.HasPrefix(line, "Hardware") {
-			if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
-				if name := strings.TrimSpace(parts[1]); name != "" {
+			if _, val, found := strings.Cut(line, ":"); found {
+				if name := strings.TrimSpace(val); name != "" {
 					return name
 				}
 			}
@@ -90,8 +80,8 @@ func parseCPUNameFromLscpu() string {
 
 	for _, line := range strings.Split(string(out), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "Model name:") {
-			if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
+			if _, val, found := strings.Cut(line, ":"); found {
+				return strings.TrimSpace(val)
 			}
 		}
 	}

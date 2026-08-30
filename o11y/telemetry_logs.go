@@ -3,6 +3,7 @@ package o11y
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -19,12 +20,13 @@ func (t *Telemetry) LogWarn(event string, fields map[string]any) {
 }
 
 func (t *Telemetry) LogError(event string, fields map[string]any, err error) {
-	if fields == nil {
-		fields = make(map[string]any)
-	}
+	// Copy rather than writing "error" into the caller's map, which would survive the call and pollute any later
+	// reuse of that map.
+	merged := make(map[string]any, len(fields)+1)
+	maps.Copy(merged, fields)
+	merged["error"] = err
 
-	fields["error"] = err
-	t.log(event, fields, log.SeverityError)
+	t.log(event, merged, log.SeverityError)
 }
 
 // region - Private methods
@@ -41,11 +43,37 @@ func (t *Telemetry) log(event string, fields map[string]any, severity log.Severi
 	t.logger.Emit(context.Background(), record)
 }
 
+// mapToAttributes renders the enrichment attributes together with this record's own fields, where a field of the same
+// name wins over the enrichment.
 func (t *Telemetry) mapToAttributes(fields map[string]any) []log.KeyValue {
-	m := lo.Assign(t.prefilled, fields)
-	attrs := make([]log.KeyValue, 0, len(m))
+	prefilled := *t.attrs.Load()
 
-	for k, v := range m {
+	// The overwhelmingly common case is a record with no extra fields, which needs no work at all.
+	if len(fields) == 0 {
+		return prefilled
+	}
+
+	own := attributesFrom(fields)
+	attrs := make([]log.KeyValue, 0, len(prefilled)+len(own))
+
+	for _, kv := range prefilled {
+		if _, overridden := fields[kv.Key]; !overridden {
+			attrs = append(attrs, kv)
+		}
+	}
+
+	return append(attrs, own...)
+}
+
+// endregion
+
+// region - Private functions
+
+// attributesFrom converts a field map into OpenTelemetry log attributes.
+func attributesFrom(fields map[string]any) []log.KeyValue {
+	attrs := make([]log.KeyValue, 0, len(fields))
+
+	for k, v := range fields {
 		switch val := v.(type) {
 		case string:
 			attrs = append(attrs, log.String(k, val))
@@ -69,10 +97,6 @@ func (t *Telemetry) mapToAttributes(fields map[string]any) []log.KeyValue {
 
 	return attrs
 }
-
-// endregion
-
-// region - Private functions
 
 func handleSlice(key string, slice any) log.KeyValue {
 	var values []log.Value

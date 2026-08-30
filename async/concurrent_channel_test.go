@@ -1,6 +1,7 @@
 package async
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -257,37 +258,44 @@ func TestProcessChannel_SlowFunction(t *testing.T) {
 	assert.Less(t, duration, 50*time.Millisecond)
 }
 
-func TestProcessChannel_ZeroConcurrency(t *testing.T) {
-	// Given
-	input := make(chan int)
+func TestProcessChannel_NonPositiveConcurrency(t *testing.T) {
+	// A concurrency below 1 used to start no workers at all: the output closed immediately, every item was
+	// discarded in silence, and the producer goroutine was left blocked on a send nobody would ever receive. It is
+	// clamped to a single worker instead.
+	for _, concurrency := range []int{0, -1, -5} {
+		t.Run(fmt.Sprintf("concurrency=%d", concurrency), func(t *testing.T) {
+			// Given
+			input := make(chan int)
 
-	go func() {
-		input <- 1
-		input <- 2
-		close(input)
-	}()
+			go func() {
+				defer close(input)
+				input <- 1
+				input <- 2
+			}()
 
-	// When
-	output := ConcurrentChannel(input, 0, func(n int) int {
-		return n * 2
-	})
+			// When
+			output := ConcurrentChannel(input, concurrency, func(n int) int {
+				return n * 2
+			})
 
-	// Then
-	var results []int
-	done := make(chan bool)
+			// Then
+			results := make([]int, 0, 2)
+			done := make(chan struct{})
 
-	go func() {
-		for result := range output {
-			results = append(results, result)
-		}
-		done <- true
-	}()
+			go func() {
+				defer close(done)
+				for result := range output {
+					results = append(results, result)
+				}
+			}()
 
-	select {
-	case <-done:
-		assert.Empty(t, results, "Should process nothing with 0 workers")
-	case <-time.After(100 * time.Millisecond):
-		assert.Empty(t, results, "Should process nothing with 0 workers")
+			select {
+			case <-done:
+				assert.ElementsMatch(t, []int{2, 4}, results, "every item must still be processed")
+			case <-time.After(2 * time.Second):
+				t.Fatal("ConcurrentChannel deadlocked with a non-positive concurrency")
+			}
+		})
 	}
 }
 

@@ -117,7 +117,7 @@ func TestMemoizer_Fields(t *testing.T) {
 		// singleflight.Group is a value type (never nil); zero value is ready to use
 		// Verify it's actually a singleflight.Group by checking we can call methods on it
 		// We'll do this by ensuring the field exists and is of the correct type
-		_, _, _ = memoizer.Sf.Do("test", func() (interface{}, error) {
+		_, _, _ = memoizer.sf.Do("test", func() (interface{}, error) {
 			return nil, nil
 		})
 	})

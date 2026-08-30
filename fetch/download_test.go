@@ -804,12 +804,14 @@ func TestTrack_ReportsTheTerminalStateOfAFailedDownload(t *testing.T) {
 	// ticker reports the final byte count while the download is still running. A Track that only
 	// reported changes would then say nothing at all about the download being over.
 	response := &Response{
-		Request:    &Request{Url: "https://example.com/file.txt"},
-		Downloaded: 100,
-		Size:       1000,
-		Done:       make(chan struct{}),
-		err:        fmt.Errorf("unexpected status: %d", http.StatusForbidden),
+		Request: &Request{Url: "https://example.com/file.txt"},
+		Done:    make(chan struct{}),
+		err:     fmt.Errorf("unexpected status: %d", http.StatusForbidden),
 	}
+
+	// Go through the same setters the download goroutine uses, so the atomic state Track reads is populated too.
+	response.setSize(1000)
+	response.addDownloaded(100)
 
 	// Long enough for at least one tick to observe Downloaded before the download ends
 	go func() {

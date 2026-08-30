@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -43,13 +44,13 @@ func (s *CompositeStore) Get(ctx context.Context, key string) ([]byte, bool, err
 }
 
 func (s *CompositeStore) Set(ctx context.Context, key string, value []byte, ttl time.Duration) error {
-	return firstErr([]Store{s.disk, s.mem}, func(st Store) error {
+	return joinErrs([]Store{s.disk, s.mem}, func(st Store) error {
 		return st.Set(ctx, key, value, ttl)
 	})
 }
 
 func (s *CompositeStore) Cleanup(ctx context.Context) error {
-	return firstErr([]Store{s.mem, s.disk}, func(st Store) error {
+	return joinErrs([]Store{s.mem, s.disk}, func(st Store) error {
 		return st.Cleanup(ctx)
 	})
 }
@@ -57,25 +58,26 @@ func (s *CompositeStore) Cleanup(ctx context.Context) error {
 // Close releases both tiers. It is safe to call more than once; every call returns the same error.
 func (s *CompositeStore) Close() error {
 	s.closeOnce.Do(func() {
-		s.closeErr = firstErr([]Store{s.mem, s.disk}, Store.Close)
+		s.closeErr = joinErrs([]Store{s.mem, s.disk}, Store.Close)
 	})
 
 	return s.closeErr
 }
 
-// firstErr runs fn against each store in order, skipping absent tiers, and reports the first error. Every store is
+// joinErrs runs fn against each store in order, skipping absent tiers, and reports every failure. Every store is
 // visited even after one fails, so a broken tier can't stop the others from being reached.
-func firstErr(stores []Store, fn func(Store) error) error {
-	var first error
+//
+// All errors are reported rather than just the first: keeping only the first meant a memory-tier failure masked an
+// unflushed disk tier, which is the one that actually loses data.
+func joinErrs(stores []Store, fn func(Store) error) error {
+	var errs []error
 	for _, st := range stores {
 		if st == nil {
 			continue
 		}
 
-		if err := fn(st); err != nil && first == nil {
-			first = err
-		}
+		errs = append(errs, fn(st))
 	}
 
-	return first
+	return errors.Join(errs...)
 }

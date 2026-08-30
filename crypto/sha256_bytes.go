@@ -2,6 +2,7 @@ package crypto
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -29,7 +30,7 @@ func Sha256Bytes(bytes []byte) (string, error) {
 		return "", fmt.Errorf("failed to write bytes to hasher: %w", err)
 	}
 
-	return fmt.Sprintf("%x", h.Sum(nil)), nil
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // Sha256String computes the SHA-256 hash of the input string and returns it as a hexadecimal string.

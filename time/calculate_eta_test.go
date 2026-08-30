@@ -149,3 +149,12 @@ func TestCalculateEta_RealWorldScenarios(t *testing.T) {
 		assert.Equal(t, expected, eta)
 	})
 }
+
+func TestCalculateEta_DoesNotOverflow(t *testing.T) {
+	// A Duration is int64 nanoseconds, so a large backlog times a slow average used to wrap around and report a
+	// negative ETA.
+	eta := CalculateEta(2_000_000_000, 1, gotime.Hour)
+
+	assert.Positive(t, eta, "ETA must never be negative")
+	assert.LessOrEqual(t, eta, 7*24*gotime.Hour, "an unrepresentable ETA saturates at the 7-day fallback")
+}

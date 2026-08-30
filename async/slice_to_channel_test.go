@@ -1,7 +1,9 @@
 package async
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -169,4 +171,30 @@ func TestSliceToChannel_ReturnsReadOnlyChannel(t *testing.T) {
 	result, ok := <-ch
 	assert.True(t, ok)
 	assert.Equal(t, 1, result)
+}
+
+func TestSliceToChannel_NonPositiveConcurrency(t *testing.T) {
+	// A concurrency of 0 made the semaphore unbuffered while its only receiver was started after the send, so the
+	// first send blocked forever, the output channel was never closed, and every consumer hung. Negative values
+	// panicked in make. Both are clamped to a single worker.
+	for _, concurrency := range []int{0, -1} {
+		t.Run(fmt.Sprintf("concurrency=%d", concurrency), func(t *testing.T) {
+			done := make(chan []int, 1)
+
+			go func() {
+				results := make([]int, 0, 3)
+				for v := range SliceToChannel([]int{1, 2, 3}, concurrency, func(n int) int { return n * 2 }) {
+					results = append(results, v)
+				}
+				done <- results
+			}()
+
+			select {
+			case results := <-done:
+				assert.ElementsMatch(t, []int{2, 4, 6}, results)
+			case <-time.After(2 * time.Second):
+				t.Fatal("SliceToChannel deadlocked with a non-positive concurrency")
+			}
+		})
+	}
 }

@@ -2,7 +2,7 @@ package crypto
 
 import (
 	"crypto/sha256"
-	"fmt"
+	"encoding/hex"
 	"io"
 	"os"
 )
@@ -27,12 +27,12 @@ func Sha256Reader(reader io.Reader) (string, error) {
 	hash := sha256.New()
 
 	// Copy the reader content to the hash
-	if _, err := io.Copy(hash, reader); err != nil {
+	if err := hashReader(hash, reader); err != nil {
 		return "", err
 	}
 
 	// Calculate the final hash and return as hex string
-	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 // Sha256File computes the SHA-256 hash of the file at the given path.

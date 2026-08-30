@@ -4,8 +4,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"strings"
-
-	"github.com/samber/lo"
 )
 
 type ListFlags uint8
@@ -47,14 +45,10 @@ func ListPath(directory string, flags ListFlags, fileExt []string) ([]string, er
 	includeFile := flags&LpFile != 0
 	recursive := flags&LpRecursive != 0
 
-	// Prepare extension set for O(1) lookup
-	fileExt = lo.Map(fileExt, func(ext string, _ int) string {
-		return strings.ToLower(ext)
-	})
-
+	// Prepare extension set for O(1) lookup, in one pass rather than building a lowercased slice first
 	extSet := make(map[string]struct{}, len(fileExt))
 	for _, ext := range fileExt {
-		extSet[ext] = struct{}{}
+		extSet[strings.ToLower(ext)] = struct{}{}
 	}
 
 	err := filepath.WalkDir(directory, func(path string, d fs.DirEntry, err error) error {

@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -25,21 +26,35 @@ type DiskStore struct {
 	closeErr  error
 }
 
+// Badger validates ValueLogFileSize against these bounds and refuses to open outside them, so a caller's MaxCapacity
+// has to be clamped rather than passed straight through.
+const (
+	minValueLogFileSize = 1 << 20        // 1 MiB
+	maxValueLogFileSize = 2<<30 - 1      // just under 2 GiB
+	maxValueLogEntries  = math.MaxUint32 // WithValueLogMaxEntries takes a uint32
+)
+
 func NewDiskStore(path string, opts CacheOpts) (*DiskStore, error) {
-	if opts.MaxEntries == 0 {
+	if opts.MaxEntries <= 0 {
 		opts.MaxEntries = 1_000_000
 	}
-	if opts.MaxCapacity == 0 {
+	if opts.MaxCapacity <= 0 {
 		opts.MaxCapacity = 1 << 30 // 1 GiB
 	}
+
+	// Clamp instead of forwarding. Passing these through verbatim meant the values the documentation itself
+	// suggested - 4 GiB, or anything under 1 MiB - made badger.Open fail outright, and a MaxEntries above the
+	// uint32 range wrapped around silently.
+	valueLogFileSize := min(max(opts.MaxCapacity, minValueLogFileSize), maxValueLogFileSize)
+	valueLogEntries := uint32(min(opts.MaxEntries, maxValueLogEntries))
 
 	db, err := badger.Open(badger.DefaultOptions(path).
 		WithCompression(options.ZSTD).
 		WithLogger(nil).
 		WithDetectConflicts(false).
 		WithIndexCacheSize(64 << 20).
-		WithValueLogMaxEntries(uint32(opts.MaxEntries)).
-		WithValueLogFileSize(opts.MaxCapacity).
+		WithValueLogMaxEntries(valueLogEntries).
+		WithValueLogFileSize(valueLogFileSize).
 		// Drain level 0 on the way out. Badger won't compact a tree that still fits in a single level, so without
 		// this the whole cache can sit in level 0 forever and Cleanup has nothing it's allowed to compact.
 		WithCompactL0OnClose(true))

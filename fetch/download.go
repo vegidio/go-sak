@@ -30,7 +30,7 @@ const maxBackoff = 30 * time.Second
 //   - A Request object containing the URL and file path.
 //   - An error if the request creation fails.
 func (f *Fetch) NewRequest(url string, filePath string, headers map[string]string) (*Request, error) {
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -47,8 +47,11 @@ func (f *Fetch) NewRequest(url string, filePath string, headers map[string]strin
 		req.Header.Set(key, value)
 	}
 
-	// Set the User-Agent header
-	req.Header.Set("User-Agent", userAgent)
+	// Default the User-Agent rather than forcing it, matching New. Overwriting it here meant neither the client's
+	// headers nor this call's headers could change the agent used for downloads.
+	if req.Header.Get("User-Agent") == "" {
+		req.Header.Set("User-Agent", userAgent)
+	}
 
 	// Create a new Request object
 	return &Request{
@@ -74,7 +77,7 @@ func (f *Fetch) DownloadFile(request *Request) *Response {
 
 	response := &Response{
 		Request: request,
-		Done:    make(chan struct{}, 1),
+		Done:    make(chan struct{}),
 		cancel:  cancel,
 	}
 
@@ -112,25 +115,20 @@ func (f *Fetch) DownloadFile(request *Request) *Response {
 
 		// Set up the progress callback
 		pw := &progressWriter{
-			file:   file,
-			hasher: hasher,
-			callback: func(downloaded int64) {
-				response.Downloaded += downloaded
-				if response.Size > 0 {
-					response.Progress = float64(response.Downloaded) / float64(response.Size)
-				}
-			},
+			file:     file,
+			hasher:   hasher,
+			callback: response.addDownloaded,
 		}
 
 		// Perform the download (with resume & retries)
-		f.downloadWithRetries(response, offset, file, pw, ctx)
+		f.downloadWithRetries(ctx, response, offset, file, pw)
 
 		sum := hasher.Sum(nil)
 		response.Hash = hex.EncodeToString(sum)
 
 		// A failed download that wrote nothing leaves an empty file behind, because the file is created
 		// before the first request is even sent; clean it up instead of littering the output directory.
-		if response.err != nil && response.Downloaded == 0 && offset == 0 {
+		if response.err != nil && response.BytesDownloaded() == 0 && offset == 0 {
 			_ = os.Remove(request.FilePath)
 		}
 	}()
@@ -196,12 +194,28 @@ func (f *Fetch) DownloadFiles(requests []*Request, parallel int) (<-chan *Respon
 				// Start the download
 				resp := f.DownloadFile(r)
 
-				// Capture the Cancel() function
+				// Capture the Cancel() function. A cancelAll racing with this send would otherwise miss
+				// the download entirely, so check afterwards whether that already happened.
 				mu.Lock()
 				cancels = append(cancels, resp.cancel)
 				mu.Unlock()
 
-				result <- resp
+				select {
+				case <-done:
+					resp.cancel()
+				default:
+				}
+
+				select {
+				case result <- resp:
+				case <-done:
+					// The consumer has stopped reading and everything was cancelled. Handing this
+					// response over would block forever, taking the sem slot and the close of result
+					// with it.
+					resp.cancel()
+					_ = resp.Error()
+					return
+				}
 
 				// Waiting for the download the complete before continuing
 				_ = resp.Error()
@@ -216,12 +230,16 @@ func (f *Fetch) DownloadFiles(requests []*Request, parallel int) (<-chan *Respon
 
 // region - Private functions
 
+// downloadWithRetries drives one download to completion, resuming where it can and retrying what is worth retrying.
+//
+// writer is the concrete *progressWriter rather than an io.Writer because a resumed download that the server answers
+// without honouring Range has to rewind the digest as well as the file.
 func (f *Fetch) downloadWithRetries(
+	ctx context.Context,
 	response *Response,
 	offset int64,
 	file *os.File,
-	writer io.Writer,
-	ctx context.Context,
+	writer *progressWriter,
 ) {
 	var resp *http.Response
 	var err error
@@ -281,15 +299,20 @@ func (f *Fetch) downloadWithRetries(
 			// Truncate file and reset offset
 			if tErr := file.Truncate(0); tErr != nil {
 				response.StatusCode = resp.StatusCode
-				response.Size = 0
+				response.setSize(0)
 				response.err = fmt.Errorf("truncate failed: %w", tErr)
 			}
+
+			// The bytes that were already on disk have been discarded, so they must be discarded from the
+			// digest too - otherwise the final hash covers the stale prefix as well as the full body.
+			writer.hasher.Reset()
+			response.resetProgress()
 
 			offset = 0
 
 			if _, sErr := file.Seek(0, io.SeekStart); sErr != nil {
 				response.StatusCode = resp.StatusCode
-				response.Size = 0
+				response.setSize(0)
 				response.err = fmt.Errorf("seek after truncate failed: %w", sErr)
 			}
 
@@ -298,13 +321,19 @@ func (f *Fetch) downloadWithRetries(
 			continue
 		}
 
+		response.downloaded.Store(offset)
 		response.Downloaded = offset
 
 		// Handle '416 Range Not Satisfiable' (already complete)
 		if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
 			response.StatusCode = resp.StatusCode
-			response.Size = offset
-			response.Progress = float64(offset) / float64(response.Size)
+			response.setSize(offset)
+
+			// offset can be 0 here when the server answers 416 to a request that carried no Range header,
+			// and 0/0 is NaN rather than a progress figure.
+			if offset > 0 {
+				response.Progress = 1
+			}
 
 			resp.Body.Close()
 			break
@@ -330,12 +359,12 @@ func (f *Fetch) downloadWithRetries(
 			// e.g. "bytes 500-999/1234"
 			var start, end, total int64
 			if _, scanErr := fmt.Sscanf(cr, "bytes %d-%d/%d", &start, &end, &total); scanErr == nil {
-				response.Size = total
+				response.setSize(total)
 			} else {
-				response.Size = offset + resp.ContentLength
+				response.setSize(sizeFrom(offset, resp.ContentLength))
 			}
 		} else {
-			response.Size = offset + resp.ContentLength
+			response.setSize(sizeFrom(offset, resp.ContentLength))
 		}
 
 		// Track where this attempt started
@@ -367,8 +396,8 @@ func (f *Fetch) downloadWithRetries(
 		}
 
 		// Success
-		if response.Size == -1 {
-			response.Size = response.Downloaded
+		if response.TotalSize() <= 0 {
+			response.setSize(response.BytesDownloaded())
 			response.Progress = 1
 		}
 
@@ -420,3 +449,13 @@ func fibonacci(n int) int {
 }
 
 // endregion
+
+// sizeFrom combines the bytes already on disk with the length the server reported. A chunked response has no length
+// and reports -1, which must be surfaced as "unknown" rather than quietly turned into offset-1.
+func sizeFrom(offset, contentLength int64) int64 {
+	if contentLength < 0 {
+		return -1
+	}
+
+	return offset + contentLength
+}

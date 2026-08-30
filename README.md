@@ -22,6 +22,10 @@ Processes items from an input slice concurrently using the specified number of w
 
 Processes items from an input channel concurrently using the specified number of worker goroutines. Returns a channel of results. Note that the order of results is not guaranteed due to concurrent processing.
 
+#### `ConcurrentChannelContext[T, R](ctx context.Context, input <-chan T, concurrency int, fn func(T) R) <-chan R`
+
+As `ConcurrentChannel`, but stops when `ctx` is cancelled. A `concurrency` below 1 is clamped to a single worker.
+
 ---
 
 ### crypto
@@ -90,6 +94,22 @@ Creates a new download request with the specified URL, file path, and optional h
 
 Downloads a single file based on the provided request. Supports resume capability, progress tracking, and automatic retries with exponential backoff. Uses BLAKE3 hashing for integrity verification.
 
+#### `DownloadFiles(requests []*Request, parallel int) (<-chan *Response, func())`
+
+Downloads several files at once, at most `parallel` at a time. Returns a channel of responses and a function that cancels every download still in flight. It is safe to stop reading the channel and then cancel; the channel is still closed.
+
+#### `Response.Track(callback func(completed, total int64, progress float64)) error`
+
+Reports progress until the download ends, then fires the callback one final time with the terminal state — exactly once, including for downloads that fail without transferring anything. Returns the download's error.
+
+#### `Response.BytesDownloaded() int64` / `TotalSize() int64` / `ProgressRatio() float64`
+
+Read the download's progress. Unlike the `Downloaded`, `Size` and `Progress` fields, these are safe to call while the transfer is still running.
+
+#### `Response.Error() error` / `IsComplete() bool` / `Cancel()` / `Bytes() ([]byte, error)`
+
+`Error` blocks until the download finishes and returns its error. `IsComplete` reports whether it has finished without blocking. `Cancel` stops it. `Bytes` reads the downloaded file back from disk.
+
 #### `GetFileCookies(filePath string) ([]Cookie, error)`
 
 Reads cookies from a Netscape-format cookie file and returns them as a slice of Cookie structs.
@@ -120,7 +140,7 @@ Represents an HTTP cookie with Name and Value fields. Used for cookie management
 
 File system operations including temporary file/directory creation, user config management, and archive extraction.
 
-#### `CopyFiles(sources []string, destDir string, flags CopyFlags, exts []string) error`
+#### `CopyFiles(sources []string, destDir string, flags CmFlags, exts []string) error`
 
 Copies files and/or directories to a destination directory with flexible options. The flags parameter controls copy behavior. The exts parameter filters files by extension. If nil or empty, no extension filtering is applied.
 
@@ -132,7 +152,7 @@ Moves files and/or directories to a destination directory with flexible options.
 
 Checks if a file exists at the specified path. Returns true if the path exists and is a file (not a directory). Returns false if the path does not exist or if it is a directory.
 
-#### `ListPath(directory string, flags Flags, fileExt []string) ([]string, error)`
+#### `ListPath(directory string, flags ListFlags, fileExt []string) ([]string, error)`
 
 Traverses a directory and returns a list of paths based on flags (LpDir, LpFile, LpRecursive) and file extensions. Extensions are case-insensitive and should include the dot (e.g., ".txt").
 
@@ -152,17 +172,35 @@ Creates a directory within the user's platform-specific configuration directory 
 
 Creates a file in the user's configuration directory with the specified application name and path components. Creates all necessary parent directories if they don't exist.
 
-#### `Unzip(zipPath, targetDirectory string) error`
+#### `Unzip(zipPath, targetDirectory string, opts ...ExtractOption) error`
 
-Extracts all files and directories from a ZIP archive to a target directory. Implements security measures to prevent Zip Slip attacks by validating paths and preventing traversal.
+Extracts a ZIP archive into a target directory.
 
-#### `Un7zip(sevenZipPath, targetDirectory string) error`
+#### `Un7zip(sevenZipPath, targetDirectory string, opts ...ExtractOption) error`
 
-Extracts all files and directories from a 7z archive to a target directory. Implements security measures to prevent Zip Slip attacks by validating paths and preventing traversal.
+Extracts a 7z archive into a target directory.
 
-#### `UntarXz(tarXzPath, targetDirectory string) error`
+#### `UntarXz(tarXzPath, targetDirectory string, opts ...ExtractOption) error`
 
-Extracts all files and directories from a TAR.XZ archive to a target directory. Includes security measures against path traversal attacks and preserves file permissions.
+Extracts a TAR.XZ archive into a target directory.
+
+All three share one extraction core. Extraction is confined to `targetDirectory` by an [`os.Root`](https://pkg.go.dev/os#Root), so neither a hostile entry name nor a chain of symbolic links planted by earlier entries in the archive can write outside it. Entry names that are absolute, that escape the root, or that name a reserved Windows device are rejected before anything is created. Extracted files keep the permission bits recorded in the archive, subject to the process umask; setuid, setgid and sticky bits are always stripped.
+
+Errors wrap `ErrIllegalPath`, `ErrIllegalSymlink` or `ErrLimitExceeded`, so they can be told apart with `errors.Is`.
+
+#### `ExtractOption`
+
+Per-call limits and overrides for the three extractors:
+
+| Option | Effect |
+| --- | --- |
+| `WithMaxTotalBytes(n int64)` | Caps the total uncompressed bytes one call may write |
+| `WithMaxFileBytes(n int64)` | Caps the uncompressed size of any single entry |
+| `WithMaxEntries(n int)` | Caps how many entries the archive may contain |
+| `WithoutSymlinks()` | Rejects archives containing symbolic links outright |
+| `WithFileMode(mode fs.FileMode)` | Applies `mode` to every extracted file instead of the archive's own |
+
+Regardless of these, an entry is never allowed to produce more bytes than it declared.
 
 ---
 
@@ -232,13 +270,29 @@ See [memo/README.md](memo/README.md) for a fuller guide to this package.
 
 Observability utilities for logging with OpenTelemetry integration.
 
-#### `InitLogger(endpoint, serviceName string, environment OtelEnvironment, destination LogDestination) (func(), error)`
+#### `NewTelemetry(endpoint, serviceName, version string, headers map[string]string, environment OtelEnvironment, enabled bool) (*Telemetry, error)`
 
-Initializes the logging system with OpenTelemetry integration. Configures Logrus as the logging framework and optionally bridges logs to an OpenTelemetry collector via OTLP/HTTP. Returns a cleanup function that should be deferred to properly shutdown the logger provider.
+Creates a `Telemetry` that ships log records to an OpenTelemetry collector over OTLP/HTTP, enriched with the application version, a machine identifier, the OS and architecture, a session id, and an approximate geolocation.
 
-#### `LogDestination`
+When `enabled` is false no exporter is installed and no record ever leaves the process. Nothing is sent over the network to build the enrichment either — in particular the geolocation lookup, which would disclose the caller's public IP to a third party, is skipped entirely.
 
-Specifies where logs should be sent: `LogToNone`, `LogToTerminal`, `LogToOTel`, `LogToBoth`.
+The returned `*Telemetry` is never nil and is safe to use and to `Close` even when the error is non-nil.
+
+#### `Telemetry.LogInfo(event string, fields map[string]any)`
+
+Emits an informational record. `LogWarn` and `LogError(event, fields, err)` are the same at warning and error severity. None of them modifies the `fields` map you pass in.
+
+#### `Telemetry.RenewSession()`
+
+Assigns a new session id to every record emitted from then on. Safe to call concurrently with the `Log` methods.
+
+#### `Telemetry.Close() error`
+
+Flushes buffered records and shuts the exporter down.
+
+#### `FetchGeolocation(baseURL ...string) (*Geolocation, error)`
+
+Looks up the approximate location of the current public IP address via ipinfo.io.
 
 #### `OtelEnvironment`
 
@@ -250,9 +304,15 @@ Specifies the OpenTelemetry environment configuration: `EnvDevelopment`, `EnvPro
 
 Operating system utilities for environment management.
 
-#### `AppendEnvPath(path string)`
+#### `AppendEnvPath(envvar string, path string)`
 
-Appends a directory path to the PATH environment variable. The path is added to the end of the existing PATH using the OS-specific path separator.
+Appends a directory path to a PATH-like environment variable, using the OS-specific path list separator.
+
+#### `ReExec(envVars ...string) error`
+
+Replaces the current process with a fresh instance of itself, preserving the command-line arguments and adding the given `KEY=VALUE` environment entries. Use it only for variables that cannot be changed after the program starts, such as `LD_LIBRARY_PATH`; prefer `os.Setenv` otherwise.
+
+`APP_REEXEC=1` is set automatically to stop the re-executed process from doing it again. On success this call never returns, because the process image has been replaced; it returns an error if the executable cannot be located, an entry is malformed, or the exec fails — including on Windows, which has no `execve`.
 
 ---
 
@@ -263,6 +323,26 @@ String manipulation utilities.
 #### `RightOf(s, sub string, useLast bool) string`
 
 Returns everything to the right of the first or last occurrence of a substring. Returns an empty string if the substring is not found. When `useLast` is true, uses the last occurrence; otherwise uses the first occurrence.
+
+---
+
+### sysinfo
+
+Hardware information about the host machine, on Linux, macOS and Windows.
+
+#### `GetCPUInfo() (CPUInfo, error)`
+
+Returns the CPU's model name and core count. Reads `/proc/cpuinfo` or `lscpu` on Linux, `sysctl` on macOS, and CIM via PowerShell on Windows.
+
+#### `GetMemoryInfo() (MemoryInfo, error)`
+
+Returns the machine's total physical RAM, in **bytes**.
+
+#### `GetGPUInfo() ([]GPUInfo, error)`
+
+Returns every GPU the machine reports, with its name, vendor and memory in MiB. Uses `system_profiler` on macOS, `nvidia-smi` merged with the DRM sysfs tree and `lspci` on Linux, and `nvidia-smi` merged with CIM on Windows.
+
+Every external tool is run with a timeout, and the well-known system utilities are invoked by absolute path so that a writable `PATH` entry cannot inject code into the calling process.
 
 ---
 
@@ -291,6 +371,20 @@ Generic utility types.
 #### `Result[T any]`
 
 A generic struct that represents the result of an operation, containing both data of type T and an error. Provides an `IsSuccess()` method that returns true if no error occurred.
+
+## ⚠️ Breaking changes
+
+The following releases change behaviour that existing code may rely on.
+
+### Unreleased
+
+- **`sysinfo.MemoryInfo.Total` is now genuinely in bytes.** It was documented as bytes but every backend divided by 1,000,000 and returned megabytes, so values read from it are now roughly a million times larger. Divide by `1_000_000` at the call site to restore the old figure.
+- **`fs.Unzip` and `fs.Un7zip` no longer force every extracted file to `0o755`.** Files keep the permission bits recorded in the archive, matching what `fs.UntarXz` always did. An extracted key or config file is no longer left world-readable and world-executable. Pass `fs.WithFileMode(0o755)` to restore the old behaviour.
+- **`os.ReExec` now returns an `error`.** It previously discarded every failure, which made it a silent no-op on Windows — where `syscall.Exec` cannot replace a process — while its documentation promised otherwise.
+- **`o11y.NewTelemetry` now returns `(*Telemetry, error)`.** The exporter's initialisation error was previously dropped, and one of its failure paths left the `Telemetry` in a state where `Close` panicked. The returned value is never nil and is safe to use and close even when the error is non-nil.
+- **`o11y` no longer contacts ipinfo.io when telemetry is disabled**, and identifies the machine with an application-scoped `machineid.ProtectedID` rather than the raw host id.
+- **`memo.Memoizer.Sf` is now unexported.** `singleflight.Group` embeds a `sync.Mutex`, so exporting it made a `Memoizer` copied by value silently unsafe.
+- **The three `fs` extractors take variadic `ExtractOption` arguments.** Existing two-argument calls are unaffected; only code assigning them to a `func(string, string) error` variable needs changing.
 
 ## 📝 License
 

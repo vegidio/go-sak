@@ -30,7 +30,7 @@ func Xxh3Bytes(bytes []byte) (string, error) {
 		return "", fmt.Errorf("failed to write bytes to hasher: %w", err)
 	}
 
-	return fmt.Sprintf("%x", h.Sum128().Bytes()), nil
+	return hexEncodeArray(h.Sum128().Bytes()), nil
 }
 
 // Xxh3String computes the XXH3 hash of the input string and returns it as a hexadecimal string.

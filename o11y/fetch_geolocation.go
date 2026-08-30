@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -20,6 +21,14 @@ type Geolocation struct {
 	Postal   string `json:"postal"`
 	Timezone string `json:"timezone"`
 }
+
+// geoClient is used instead of http.DefaultClient, which is a shared mutable global that any dependency in the
+// process can reconfigure out from under us.
+var geoClient = &http.Client{Transport: http.DefaultTransport}
+
+// maxGeoResponse caps the response body. The service returns well under a kilobyte, so anything larger is either a
+// misconfigured endpoint or a hostile one.
+const maxGeoResponse = 64 << 10
 
 // FetchGeolocation retrieves geolocation information for the current public IP address.
 //
@@ -42,7 +51,7 @@ func FetchGeolocation(baseURL ...string) (*Geolocation, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := geoClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch geolocation: %w", err)
 	}
@@ -53,7 +62,7 @@ func FetchGeolocation(baseURL ...string) (*Geolocation, error) {
 	}
 
 	var geo Geolocation
-	if err = json.NewDecoder(resp.Body).Decode(&geo); err != nil {
+	if err = json.NewDecoder(io.LimitReader(resp.Body, maxGeoResponse)).Decode(&geo); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 

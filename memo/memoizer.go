@@ -9,7 +9,10 @@ import (
 
 type Memoizer struct {
 	Store internal.Store
-	Sf    singleflight.Group
+
+	// sf is unexported because singleflight.Group embeds a sync.Mutex, which made a Memoizer copied by value
+	// silently unsafe. It is an implementation detail of Do in any case.
+	sf singleflight.Group
 }
 
 // NewMemoizer creates a new Memoizer instance with the provided store. The store parameter defines the underlying

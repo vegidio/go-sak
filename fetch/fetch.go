@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"maps"
 	"net/http"
 	"time"
 
@@ -18,9 +19,16 @@ type Fetch struct {
 	retries    int
 }
 
-var http11Transport = &http.Transport{
-	ForceAttemptHTTP2: false,
-	TLSNextProto:      make(map[string]func(string, *tls.Conn) http.RoundTripper),
+var http11Transport = newHTTP11Transport()
+
+// newHTTP11Transport clones http.DefaultTransport and disables HTTP/2 on the copy, so that opting out of HTTP/2 does
+// not also opt out of proxy support and the default connection timeouts.
+func newHTTP11Transport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ForceAttemptHTTP2 = false
+	t.TLSNextProto = make(map[string]func(string, *tls.Conn) http.RoundTripper)
+
+	return t
 }
 
 var userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) " +
@@ -38,18 +46,17 @@ func New(headers map[string]string, retries int, disableHttp2 bool) *Fetch {
 	logger := log.New()
 
 	f := resty.New()
-	f.SetRedirectPolicy(resty.FlexibleRedirectPolicy(maxRedirects), resty.RedirectPolicyFunc(func(req *http.Request, via []*http.Request) error {
-		if isUnsafeDowngrade(req, via) {
-			return fmt.Errorf("refusing redirect from https to http: %s", req.URL)
-		}
 
-		return nil
-	}))
+	// Reuse the same policy as the download client, so the two cannot drift apart.
+	f.SetRedirectPolicy(resty.FlexibleRedirectPolicy(maxRedirects), resty.RedirectPolicyFunc(safeCheckRedirect))
 
 	if disableHttp2 {
 		f.SetTransport(http11Transport)
 	}
 
+	// Copy rather than defaulting into the caller's map: the map is retained in the Fetch and read by NewRequest
+	// from arbitrary goroutines, so sharing it with the caller is both surprising and racy.
+	headers = maps.Clone(headers)
 	if headers == nil {
 		headers = make(map[string]string)
 	}
@@ -67,25 +74,9 @@ func New(headers map[string]string, retries int, disableHttp2 bool) *Fetch {
 			SetHeaders(headers).
 			SetRetryCount(retries).
 			SetRetryWaitTime(0).
-			AddRetryCondition(
-				func(r *resty.Response, err error) bool {
-					if (err != nil || r.IsError()) && r.Request.Attempt <= retries {
-						sleep := time.Duration(fibonacci(r.Request.Attempt+1)) * time.Second
-
-						log.WithFields(log.Fields{
-							"attempt": r.Request.Attempt,
-							"error":   r.Error(),
-							"status":  r.StatusCode(),
-							"url":     r.Request.URL,
-						}).Warn("failed to get data; retrying in ", sleep)
-
-						time.Sleep(sleep)
-						return true
-					}
-
-					return false
-				},
-			),
+			SetRetryMaxWaitTime(maxBackoff).
+			SetRetryAfter(retryAfter).
+			AddRetryCondition(shouldRetry),
 
 		httpClient: newIdleTimeoutClient(30 * time.Second),
 		headers:    headers,
@@ -215,3 +206,49 @@ func (f *Fetch) doRequest(ctx context.Context, url string, headers map[string]st
 
 	return resp, nil
 }
+
+// region - Retry policy
+
+// shouldRetry reports whether a failed attempt is worth repeating.
+//
+// resty invokes a retry condition with a nil *Response when the failure happened before a request could even be sent,
+// such as an unparsable URL, so every field access here has to be guarded.
+func shouldRetry(r *resty.Response, err error) bool {
+	if err != nil {
+		return true
+	}
+
+	if r == nil {
+		return false
+	}
+
+	// A 403 or a 404 answers the same way ten times in a row; only retry what the server said was temporary.
+	return r.IsError() && isRetryableStatus(r.StatusCode())
+}
+
+// retryAfter returns how long to wait before the next attempt, capped at maxBackoff.
+//
+// The wait is returned rather than slept for, so that resty owns the delay: sleeping inside the retry condition made
+// the wait uncancellable by the request context, and resty then slept again on top of it.
+func retryAfter(_ *resty.Client, r *resty.Response) (time.Duration, error) {
+	attempt := 1
+	if r != nil && r.Request != nil {
+		attempt = r.Request.Attempt
+	}
+
+	wait := time.Duration(fibonacci(attempt+1)) * time.Second
+	wait = min(wait, maxBackoff)
+
+	fields := log.Fields{"attempt": attempt, "retry_in": wait}
+	if r != nil {
+		fields["status"] = r.StatusCode()
+		if r.Request != nil {
+			fields["url"] = r.Request.URL
+		}
+	}
+	log.WithFields(fields).Warn("failed to get data; retrying")
+
+	return wait, nil
+}
+
+// endregion

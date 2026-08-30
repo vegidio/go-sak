@@ -33,13 +33,16 @@ func ConcurrentChannelContext[T any, R any](
 ) <-chan R {
 	output := make(chan R)
 
+	// With a concurrency below 1 no worker would ever start: output would close immediately and the whole input
+	// would be discarded in silence, leaving whoever fills the input channel blocked forever.
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
 	var wg sync.WaitGroup
-	wg.Add(concurrency)
 
 	for range concurrency {
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			for {
 				select {
 				case <-ctx.Done():
@@ -57,7 +60,7 @@ func ConcurrentChannelContext[T any, R any](
 					}
 				}
 			}
-		}()
+		})
 	}
 
 	// Close output once all workers are done

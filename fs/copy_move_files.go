@@ -2,6 +2,7 @@ package fs
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -172,13 +173,13 @@ func transferDirectory(source, destDir string, recursive, preserveStructure bool
 }
 
 func removeFilteredFiles(source string, recursive bool, normalizedExts []string) error {
-	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
 		// Handle directories
-		if info.IsDir() {
+		if entry.IsDir() {
 			if !recursive && path != source {
 				return filepath.SkipDir
 			}
@@ -234,13 +235,13 @@ func copyFlattened(source, destDir string, recursive bool, hasExtFilter bool, no
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+	return filepath.WalkDir(source, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
 		// Handle directories
-		if info.IsDir() {
+		if entry.IsDir() {
 			if !recursive && path != source {
 				return filepath.SkipDir
 			}

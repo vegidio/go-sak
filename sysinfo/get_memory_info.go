@@ -8,11 +8,14 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type MemoryInfo struct {
-	Total uint64 // bytes
+	// Total is the machine's physical RAM in bytes.
+	//
+	// Releases before 26.5.0 documented this as bytes but actually returned megabytes; it is now genuinely bytes,
+	// so a value read here is roughly a million times larger than it used to be.
+	Total uint64
 }
 
 // GetMemoryInfo returns the machine's total physical RAM (bytes) on Windows, Linux and macOS.
@@ -21,25 +24,16 @@ type MemoryInfo struct {
 // - macOS: uses sysctl hw.memsize
 // - Windows: uses PowerShell (CIM) Win32_ComputerSystem TotalPhysicalMemory
 func GetMemoryInfo() (MemoryInfo, error) {
-	var mem MemoryInfo
-	var err error
-	var wg sync.WaitGroup
-
-	wg.Go(func() {
-		switch runtime.GOOS {
-		case "linux":
-			mem, err = linuxTotalMemory()
-		case "darwin":
-			mem, err = macTotalMemory()
-		case "windows":
-			mem, err = windowsTotalMemory()
-		default:
-			mem, err = MemoryInfo{}, errors.New("unsupported OS: "+runtime.GOOS)
-		}
-	})
-
-	wg.Wait()
-	return mem, err
+	switch runtime.GOOS {
+	case "linux":
+		return linuxTotalMemory()
+	case "darwin":
+		return macTotalMemory()
+	case "windows":
+		return windowsTotalMemory()
+	default:
+		return MemoryInfo{}, errors.New("unsupported OS: " + runtime.GOOS)
+	}
 }
 
 func linuxTotalMemory() (MemoryInfo, error) {
@@ -48,7 +42,7 @@ func linuxTotalMemory() (MemoryInfo, error) {
 		return MemoryInfo{}, err
 	}
 
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.Lines(string(b)) {
 		if strings.HasPrefix(line, "MemTotal:") {
 			fields := strings.Fields(line)
 
@@ -62,8 +56,8 @@ func linuxTotalMemory() (MemoryInfo, error) {
 				return MemoryInfo{}, err
 			}
 
-			// /proc/meminfo reports in KiB, convert to MB
-			return MemoryInfo{Total: kb * KiB / 1_000_000}, nil
+			// /proc/meminfo reports kibibytes
+			return MemoryInfo{Total: kb * KiB}, nil
 		}
 	}
 
@@ -85,7 +79,7 @@ func macTotalMemory() (MemoryInfo, error) {
 		return MemoryInfo{}, errors.New("sysctl returned 0")
 	}
 
-	return MemoryInfo{Total: n / 1_000_000}, nil
+	return MemoryInfo{Total: n}, nil
 }
 
 func windowsTotalMemory() (MemoryInfo, error) {
@@ -120,5 +114,5 @@ func windowsTotalMemory() (MemoryInfo, error) {
 		return MemoryInfo{}, errors.New("could not read TotalPhysicalMemory")
 	}
 
-	return MemoryInfo{Total: total / 1_000_000}, nil
+	return MemoryInfo{Total: total}, nil
 }

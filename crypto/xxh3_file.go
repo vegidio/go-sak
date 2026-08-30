@@ -1,7 +1,6 @@
 package crypto
 
 import (
-	"fmt"
 	"io"
 	"os"
 
@@ -28,12 +27,12 @@ func Xxh3Reader(reader io.Reader) (string, error) {
 	hash := xxh3.New()
 
 	// Copy the reader content to the hash
-	if _, err := io.Copy(hash, reader); err != nil {
+	if err := hashReader(hash, reader); err != nil {
 		return "", err
 	}
 
 	// Calculate the final hash and return as hex string
-	return fmt.Sprintf("%x", hash.Sum128().Bytes()), nil
+	return hexEncodeArray(hash.Sum128().Bytes()), nil
 }
 
 // Xxh3File computes the XXH3 hash of the file at the given path.

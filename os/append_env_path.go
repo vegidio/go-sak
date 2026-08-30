@@ -1,6 +1,10 @@
 package os
 
-import goos "os"
+import (
+	"strings"
+
+	goos "os"
+)
 
 // AppendEnvPath appends a path to an environment variable that contains a list of paths.
 //
@@ -26,7 +30,7 @@ func AppendEnvPath(envvar string, path string) {
 
 	// Check if the existing value already ends with a separator
 	separator := string(goos.PathListSeparator)
-	if len(existingValue) > 0 && existingValue[len(existingValue)-1:] == separator {
+	if strings.HasSuffix(existingValue, separator) {
 		goos.Setenv(envvar, existingValue+path)
 	} else {
 		goos.Setenv(envvar, existingValue+separator+path)

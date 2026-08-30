@@ -25,7 +25,7 @@ import gotime "time"
 func CalculateEta(total, completed int, elapsed gotime.Duration) gotime.Duration {
 	// Validate inputs
 	if total <= 0 || completed <= 0 || elapsed <= 0 {
-		return gotime.Duration(7 * 24 * gotime.Hour)
+		return maxEta
 	}
 
 	// Nothing to do
@@ -33,9 +33,17 @@ func CalculateEta(total, completed int, elapsed gotime.Duration) gotime.Duration
 		return 0
 	}
 
-	remaining := total - completed
-	avgPerTask := elapsed / gotime.Duration(completed)
-	eta := avgPerTask * gotime.Duration(remaining)
+	remaining := int64(total - completed)
+	avgPerTask := int64(elapsed) / int64(completed)
 
-	return eta
+	// A Duration is int64 nanoseconds, so a large backlog multiplied by a slow average overflows and wraps to a
+	// negative ETA. Saturate at the same fallback used for invalid input instead.
+	if avgPerTask != 0 && remaining > int64(maxEta)/avgPerTask {
+		return maxEta
+	}
+
+	return gotime.Duration(avgPerTask * remaining)
 }
+
+// maxEta is both the fallback for unusable input and the ceiling for an estimate that would otherwise overflow.
+const maxEta = 7 * 24 * gotime.Hour

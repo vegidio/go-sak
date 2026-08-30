@@ -9,9 +9,27 @@ import (
 
 	"github.com/browserutils/kooky"
 	_ "github.com/browserutils/kooky/browser/all"
-	"github.com/samber/lo"
 )
 
+// httpOnlyPrefix marks an HttpOnly cookie in the files curl, yt-dlp and the browser export extensions produce. The
+// line is a normal record behind it, and it is usually the session cookie the caller actually wants.
+const httpOnlyPrefix = "#HttpOnly_"
+
+// maxCookieLine is the scanner's buffer ceiling. bufio's own default of 64 KiB is small enough that a single JWT or
+// session blob can exceed it.
+const maxCookieLine = 1024 * 1024
+
+// GetFileCookies reads cookies from a file in the Netscape cookie-jar format.
+//
+// Lines that are blank, commented, or do not carry the seven tab-separated fields the format specifies are skipped.
+// An "#HttpOnly_" prefix is stripped rather than treated as a comment.
+//
+// # Parameters:
+//   - filePath: path to the cookie file
+//
+// # Returns:
+//   - the cookies found in the file
+//   - an error if the file cannot be opened or cannot be read to the end
 func GetFileCookies(filePath string) ([]Cookie, error) {
 	cookies := make([]Cookie, 0)
 
@@ -23,8 +41,13 @@ func GetFileCookies(filePath string) ([]Cookie, error) {
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxCookieLine)
+
 	for scanner.Scan() {
 		line := scanner.Text()
+
+		// An HttpOnly record is a real cookie wearing a comment prefix, not a comment.
+		line = strings.TrimPrefix(line, httpOnlyPrefix)
 
 		// Skip comments & blank lines
 		if len(line) == 0 || line[0] == '#' {
@@ -46,6 +69,12 @@ func GetFileCookies(filePath string) ([]Cookie, error) {
 		})
 	}
 
+	// Without this, an over-long line or a read error ends the loop and returns a silently truncated cookie list
+	// with a nil error, leaving the caller to authenticate with a partial jar.
+	if err = scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read cookie file %s: %w", filePath, err)
+	}
+
 	return cookies, nil
 }
 
@@ -64,9 +93,16 @@ func GetBrowserCookies(domain string) []Cookie {
 }
 
 func CookiesToHeader(cookies []Cookie) string {
-	parts := lo.Map(cookies, func(cookie Cookie, index int) string {
-		return fmt.Sprintf("%s=%s", cookie.Name, cookie.Value)
-	})
+	var sb strings.Builder
+	for i, cookie := range cookies {
+		if i > 0 {
+			sb.WriteString("; ")
+		}
 
-	return strings.Join(parts, "; ")
+		sb.WriteString(cookie.Name)
+		sb.WriteByte('=')
+		sb.WriteString(cookie.Value)
+	}
+
+	return sb.String()
 }

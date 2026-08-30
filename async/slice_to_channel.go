@@ -35,21 +35,26 @@ import "sync"
 func SliceToChannel[T any, R any](items []T, concurrency int, fn func(T) R) <-chan R {
 	out := make(chan R)
 
+	// A concurrency below 1 would make sem unbuffered, and the goroutine that drains it is only started after the
+	// send succeeds - so the very first send would block forever, out would never close, and every consumer would
+	// hang. A negative value would panic in make outright.
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
 	go func() {
 		defer close(out)
 		var wg sync.WaitGroup
 		sem := make(chan struct{}, concurrency)
 
 		for _, v := range items {
-			wg.Add(1)
 			sem <- struct{}{}
 
-			go func(item T) {
-				defer wg.Done()
+			wg.Go(func() {
 				defer func() { <-sem }()
 
-				out <- fn(item)
-			}(v)
+				out <- fn(v)
+			})
 		}
 
 		wg.Wait()

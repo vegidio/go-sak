@@ -26,7 +26,7 @@ func TestReExec(t *testing.T) {
 
 		// This should return immediately without re-executing
 		// If it doesn't return, the test will hang/fail
-		ReExec("TEST=value")
+		_ = ReExec("TEST=value")
 
 		// If we reach here, the function returned correctly
 		assert.Equal(t, "1", os.Getenv("APP_REEXEC"))
@@ -35,7 +35,7 @@ func TestReExec(t *testing.T) {
 	t.Run("subprocess re-executes with additional environment variables", func(t *testing.T) {
 		if os.Getenv("TEST_REEXEC_SUBPROCESS") == "1" {
 			// This is the re-executed subprocess
-			ReExec("CUSTOM_VAR=custom_value", "ANOTHER_VAR=another_value")
+			_ = ReExec("CUSTOM_VAR=custom_value", "ANOTHER_VAR=another_value")
 
 			// After ReExec, check that variables are set
 			assert.Equal(t, "1", os.Getenv("APP_REEXEC"))
@@ -58,7 +58,7 @@ func TestReExec(t *testing.T) {
 
 	t.Run("subprocess re-executes with no additional variables", func(t *testing.T) {
 		if os.Getenv("TEST_REEXEC_NO_VARS") == "1" {
-			ReExec()
+			_ = ReExec()
 
 			// Verify APP_REEXEC was set
 			assert.Equal(t, "1", os.Getenv("APP_REEXEC"))
@@ -78,7 +78,7 @@ func TestReExec(t *testing.T) {
 
 	t.Run("subprocess preserves existing environment variables", func(t *testing.T) {
 		if os.Getenv("TEST_REEXEC_PRESERVE") == "1" {
-			ReExec("NEW_VAR=new_value")
+			_ = ReExec("NEW_VAR=new_value")
 
 			// Check that the original env var is preserved
 			assert.Equal(t, "preserved_value", os.Getenv("PRESERVE_ME"))
@@ -100,7 +100,7 @@ func TestReExec(t *testing.T) {
 
 	t.Run("subprocess handles environment variables with special characters", func(t *testing.T) {
 		if os.Getenv("TEST_REEXEC_SPECIAL") == "1" {
-			ReExec("VAR_WITH_EQUALS=value=with=equals", "VAR_WITH_SPACES=value with spaces")
+			_ = ReExec("VAR_WITH_EQUALS=value=with=equals", "VAR_WITH_SPACES=value with spaces")
 
 			assert.Equal(t, "value=with=equals", os.Getenv("VAR_WITH_EQUALS"))
 			assert.Equal(t, "value with spaces", os.Getenv("VAR_WITH_SPACES"))
@@ -127,7 +127,7 @@ func TestReExec(t *testing.T) {
 				"VAR4=value4",
 				"VAR5=value5",
 			}
-			ReExec(vars...)
+			_ = ReExec(vars...)
 
 			assert.Equal(t, "value1", os.Getenv("VAR1"))
 			assert.Equal(t, "value2", os.Getenv("VAR2"))
@@ -150,7 +150,7 @@ func TestReExec(t *testing.T) {
 
 	t.Run("subprocess preserves command line arguments", func(t *testing.T) {
 		if os.Getenv("TEST_REEXEC_ARGS") == "1" {
-			ReExec("CHECK_ARGS=1")
+			_ = ReExec("CHECK_ARGS=1")
 
 			// Verify args are preserved
 			require.True(t, len(os.Args) > 0)
@@ -173,7 +173,7 @@ func TestReExec(t *testing.T) {
 func TestReExec_EdgeCases(t *testing.T) {
 	t.Run("handles empty string environment variable", func(t *testing.T) {
 		if os.Getenv("TEST_REEXEC_EMPTY") == "1" {
-			ReExec("EMPTY_VAR=")
+			_ = ReExec("EMPTY_VAR=")
 
 			assert.Equal(t, "", os.Getenv("EMPTY_VAR"))
 			os.Exit(48)
@@ -199,7 +199,7 @@ func TestReExec_EdgeCases(t *testing.T) {
 		// Stage 1: initial subprocess. APP_REEXEC is "0" (non-"1"), so ReExec must re-execute.
 		if os.Getenv("TEST_REEXEC_OTHER_STAGE1") == "1" {
 			os.Setenv("APP_REEXEC", "0")
-			ReExec("TEST_REEXEC_OTHER_STAGE2=1", "TEST_VAR=test")
+			_ = ReExec("TEST_REEXEC_OTHER_STAGE2=1", "TEST_VAR=test")
 			// Only reached if syscall.Exec failed, which is a real failure to surface.
 			t.Fatal("syscall.Exec did not replace the process")
 		}

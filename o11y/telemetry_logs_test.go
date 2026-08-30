@@ -10,7 +10,7 @@ import (
 )
 
 func newTestTelemetry() *Telemetry {
-	return NewTelemetry(
+	tel, _ := NewTelemetry(
 		"localhost:4318",
 		"test-service",
 		"1.0.0",
@@ -18,6 +18,8 @@ func newTestTelemetry() *Telemetry {
 		EnvDevelopment,
 		false,
 	)
+
+	return tel
 }
 
 func TestLogInfo(t *testing.T) {
@@ -45,13 +47,29 @@ func TestLogError(t *testing.T) {
 	tel := newTestTelemetry()
 	defer tel.Close()
 
-	t.Run("attaches error to fields", func(t *testing.T) {
+	t.Run("does not mutate the caller's fields", func(t *testing.T) {
+		// The error belongs on the record, not in the map the caller passed in and may well reuse.
 		fields := map[string]any{"op": "connect"}
 		tel.LogError("db failure", fields, errors.New("boom"))
-		assert.Equal(t, errors.New("boom").Error(), fields["error"].(error).Error())
+
+		assert.Equal(t, map[string]any{"op": "connect"}, fields)
+		assert.NotContains(t, fields, "error")
 	})
 
-	t.Run("allocates fields when nil", func(t *testing.T) {
+	t.Run("renders the error onto the record", func(t *testing.T) {
+		attrs := tel.mapToAttributes(map[string]any{"error": errors.New("boom")})
+
+		var found bool
+		for _, a := range attrs {
+			if a.Key == "error" {
+				found = true
+				assert.Contains(t, a.Value.AsString(), "boom")
+			}
+		}
+		assert.True(t, found, "the error must reach the emitted record")
+	})
+
+	t.Run("handles nil fields", func(t *testing.T) {
 		assert.NotPanics(t, func() {
 			tel.LogError("nil-fields", nil, errors.New("boom"))
 		})
@@ -61,7 +79,7 @@ func TestLogError(t *testing.T) {
 func TestMapToAttributes(t *testing.T) {
 	tel := newTestTelemetry()
 	defer tel.Close()
-	tel.prefilled = map[string]any{} // isolate from auto-prefilled fields
+	tel.setPrefilled(map[string]any{}) // isolate from auto-prefilled fields
 
 	t.Run("covers primitive types", func(t *testing.T) {
 		attrs := tel.mapToAttributes(map[string]any{

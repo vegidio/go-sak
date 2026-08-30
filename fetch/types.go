@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/zeebo/blake3"
@@ -23,16 +24,72 @@ type Request struct {
 // Response
 
 type Response struct {
-	Request    *Request
+	Request *Request
+
+	// StatusCode, Size, Downloaded and Progress are updated by the download goroutine while the transfer is in
+	// flight. Read them directly only once IsComplete reports true or Error has returned; while a download is
+	// running use BytesDownloaded, TotalSize and ProgressRatio, which read the same state atomically.
 	StatusCode int
 	Size       int64
 	Downloaded int64
 	Progress   float64
-	Hash       string
-	Done       chan struct{} `json:"-"`
+
+	Hash string
+	Done chan struct{} `json:"-"`
+
+	// Atomic mirrors of Size and Downloaded. The exported fields above are kept in step for compatibility, but
+	// these are what Track and the accessors read, so progress can be observed from another goroutine without a
+	// data race or a torn 64-bit read.
+	size       atomic.Int64
+	downloaded atomic.Int64
 
 	cancel context.CancelFunc
 	err    error
+}
+
+// setSize records the total size of the download.
+func (r *Response) setSize(n int64) {
+	r.size.Store(n)
+	r.Size = n
+}
+
+// addDownloaded records n more bytes written to disk and refreshes the progress ratio.
+func (r *Response) addDownloaded(n int64) {
+	downloaded := r.downloaded.Add(n)
+	r.Downloaded = downloaded
+
+	if size := r.size.Load(); size > 0 {
+		r.Progress = float64(downloaded) / float64(size)
+	}
+}
+
+// resetProgress rewinds the counters after a resumed download had to start over from the beginning.
+func (r *Response) resetProgress() {
+	r.downloaded.Store(0)
+	r.Downloaded = 0
+	r.Progress = 0
+}
+
+// BytesDownloaded returns how many bytes have been written so far. It is safe to call while the download is running.
+func (r *Response) BytesDownloaded() int64 {
+	return r.downloaded.Load()
+}
+
+// TotalSize returns the total size of the download, or 0 if the server did not report one. It is safe to call while
+// the download is running.
+func (r *Response) TotalSize() int64 {
+	return r.size.Load()
+}
+
+// ProgressRatio returns how much of the download is complete, from 0 to 1, or 0 when the total size is unknown. It is
+// safe to call while the download is running.
+func (r *Response) ProgressRatio() float64 {
+	size := r.size.Load()
+	if size <= 0 {
+		return 0
+	}
+
+	return float64(r.downloaded.Load()) / float64(size)
 }
 
 // Error waits for the download to complete and returns any error that occurred during the process.
@@ -87,16 +144,26 @@ func (r *Response) Track(callback func(completed, total int64, progress float64)
 	oldValue := int64(-1)
 
 	for {
+		// select picks at random among ready cases, so a tick that becomes ready at the same moment as Done
+		// would otherwise fire the callback and then let the next iteration fire it again. Checking for
+		// completion first makes the terminal call happen exactly once.
+		select {
+		case <-r.Done:
+			callback(r.BytesDownloaded(), r.TotalSize(), r.ProgressRatio())
+			return r.Error()
+		default:
+		}
+
 		select {
 		case <-ticker.C:
 			// While the download runs there is nothing to report unless it moved
-			if r.Downloaded != oldValue {
-				oldValue = r.Downloaded
-				callback(r.Downloaded, r.Size, r.Progress)
+			if downloaded := r.BytesDownloaded(); downloaded != oldValue {
+				oldValue = downloaded
+				callback(downloaded, r.TotalSize(), r.ProgressRatio())
 			}
 
 		case <-r.Done:
-			callback(r.Downloaded, r.Size, r.Progress)
+			callback(r.BytesDownloaded(), r.TotalSize(), r.ProgressRatio())
 			return r.Error()
 		}
 	}

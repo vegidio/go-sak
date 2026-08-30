@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/gob"
+	"fmt"
+	"reflect"
 	"time"
 )
 
@@ -46,8 +48,9 @@ func Do[T any](
 		}
 	}
 
-	// Deduplicate concurrent misses
-	val, err, _ := m.Sf.Do(key, func() (any, error) {
+	// Deduplicate concurrent misses. The singleflight key carries T as well, because two Do calls of different
+	// types can legitimately share a cache key, and a caller must never be handed the other one's value.
+	val, err, _ := m.sf.Do(reflect.TypeFor[T]().String()+"\x00"+key, func() (any, error) {
 		// Recheck inside singleflight
 		if b, ok, err := m.Store.Get(ctx, key); err == nil && ok {
 			if v, e := decodeGob[T](b); e == nil {
@@ -71,7 +74,12 @@ func Do[T any](
 		return zero, err
 	}
 
-	return val.(T), nil
+	res, ok := val.(T)
+	if !ok {
+		return zero, fmt.Errorf("memo: cached value for key %q is %T, not %s", key, val, reflect.TypeFor[T]())
+	}
+
+	return res, nil
 }
 
 // region - Private methods

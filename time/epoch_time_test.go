@@ -34,14 +34,14 @@ func TestEpochTime_UnmarshalJSON(t *testing.T) {
 	})
 
 	t.Run("floating point epoch time", func(t *testing.T) {
-		// Test with fractional seconds (though they'll be truncated in Unix conversion)
+		// Fractional seconds are preserved rather than truncated away
 		jsonData := `1672531200.5`
 
 		var et EpochTime
 		err := json.Unmarshal([]byte(jsonData), &et)
 
 		assert.NoError(t, err)
-		expected := time.Unix(1672531200, 0) // Unix truncates to seconds
+		expected := time.Unix(1672531200, 500_000_000)
 		assert.Equal(t, expected, et.Time)
 	})
 
@@ -218,16 +218,24 @@ func TestEpochTime_EdgeCases(t *testing.T) {
 		assert.Equal(t, expected, et.Time)
 	})
 
-	t.Run("precision loss with float64", func(t *testing.T) {
-		// Test that fractional seconds are handled (but lost in Unix conversion)
+	t.Run("keeps fractional seconds", func(t *testing.T) {
 		jsonData := `1672531200.123456789`
 
 		var et EpochTime
 		err := json.Unmarshal([]byte(jsonData), &et)
 
 		assert.NoError(t, err)
-		// Unix() truncates to seconds, so fractional part should be lost
-		expected := time.Unix(1672531200, 0)
-		assert.Equal(t, expected, et.Time)
+		assert.Equal(t, int64(1672531200), et.Unix())
+
+		// The exact nanosecond cannot survive a float64 of this magnitude - it holds roughly 100ns of
+		// resolution here - so assert that the sub-second part is kept and close, not that it is exact.
+		assert.InDelta(t, 123456789, et.Nanosecond(), 1000, "fractional seconds must not be truncated away")
+	})
+
+	t.Run("rejects an epoch beyond int64", func(t *testing.T) {
+		var et EpochTime
+		err := json.Unmarshal([]byte(`1e300`), &et)
+
+		assert.Error(t, err, "converting an out-of-range float64 to int64 is implementation-defined")
 	})
 }

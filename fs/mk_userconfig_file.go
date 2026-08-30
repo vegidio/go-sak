@@ -43,6 +43,14 @@ func MkUserConfigFile(name string, parts ...string) (*os.File, error) {
 		return nil, fmt.Errorf("no path components provided")
 	}
 
+	// Without this, MkUserConfigFile("app", "..", "..", ".ssh", "authorized_keys") would happily write outside the
+	// user's config directory.
+	for _, part := range parts {
+		if !filepath.IsLocal(part) {
+			return nil, fmt.Errorf("illegal path component: %s", part)
+		}
+	}
+
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil, fmt.Errorf("error getting the user config dir: %w", err)
