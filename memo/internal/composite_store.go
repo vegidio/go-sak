@@ -20,6 +20,16 @@ func NewCompositeStore(mem, disk Store, hotTTL time.Duration) *CompositeStore {
 	return &CompositeStore{mem: mem, disk: disk, hotTTL: hotTTL}
 }
 
+// Path reports the directory of the disk tier, so a composite store answers the question as usefully as a plain disk
+// one does. It is empty when there is no disk tier, or when that tier has no directory of its own.
+func (s *CompositeStore) Path() string {
+	if p, ok := s.disk.(interface{ Path() string }); ok {
+		return p.Path()
+	}
+
+	return ""
+}
+
 func (s *CompositeStore) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	if s.mem != nil {
 		if b, ok, err := s.mem.Get(ctx, key); err != nil {

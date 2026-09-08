@@ -56,6 +56,7 @@ func main() {
 | `NewMemoryOnly` | No | Fastest | Data is hot, cheap to recompute, and one process owns it |
 | `NewDiskOnly` | Yes | Disk-bound | Results are expensive and must outlive the process |
 | `NewMemoryDisk` | Yes | Fast on repeat | The usual pick: memory in front, disk behind it |
+| `NewDiskShared` | Yes | Disk-bound | Same as `NewDiskOnly`, but the setup that opens it can run more than once |
 
 ### Memory only
 
@@ -84,6 +85,32 @@ if err != nil {
 }
 defer m.Close()
 ```
+
+### Disk, opened more than once
+
+Badger takes one lock per directory. It isn't reentrant and can't be waited on, so a process that opens a path it
+already holds doesn't block — it fails, with an error that reads exactly like a *different* process holding the lock:
+
+```
+Cannot acquire directory lock on "/var/cache/myapp".  Another process is using this Badger database
+```
+
+That bites anything whose setup can run twice: a library re-initialised without being torn down first, a desktop app
+whose UI reloads while the backend keeps running, a test that opens a fixture per case. `NewDiskShared` returns the
+store this process already has open instead of trying to open it again.
+
+```go
+m, err := memo.NewDiskShared("/var/cache/myapp", memo.CacheOpts{})
+if err != nil {
+    return err
+}
+defer m.Close()
+```
+
+Each call returns its own handle, so each needs its own `Close`; the store closes with the last one. Handles share the
+store but not the memoization — `Do` deduplicates per memoizer, so two handles computing the same key at once may both
+compute it. Directories are matched by absolute path, not by inode, so two symlinks to the same directory still
+collide on the lock. Sizing comes from whichever call opens the store.
 
 ### Memory + disk
 
@@ -186,9 +213,14 @@ under 512 MiB".
 - **Corrupt entries are ignored.** If a cached value can't be decoded into `T` — say the struct changed shape since it
   was written — it's treated as a miss and recomputed. Changing a cached type is safe, but consider versioning the key
   (`memo.KeyFrom("user:v2", id)`) so old entries expire rather than being re-decoded on every read.
-- **Close what you open.** `NewMemoryOnly` and `NewDiskOnly` return a memoizer you `Close`; `NewMemoryDisk` returns a
-  cleanup function. Both are safe to call more than once, and both return the same result each time. Closing a disk
-  store interrupts any sweep in flight rather than waiting for it to finish.
+- **Close what you open.** `NewMemoryOnly`, `NewDiskOnly` and `NewDiskShared` return a memoizer you `Close`;
+  `NewMemoryDisk` returns a cleanup function. Both are safe to call more than once, and both return the same result
+  each time. Closing a disk store interrupts any sweep in flight rather than waiting for it to finish.
+- **A declined write isn't a failed one.** The memory store returns `memo.ErrNotAdmitted` when it drops a write — its
+  set buffer was full, or the store is closing. Nothing is lost but a future hit, so it's worth telling apart from a
+  store that actually broke: `errors.Is(err, memo.ErrNotAdmitted)`.
+- **`Path()` reports the directory.** Empty for a memory store, the disk tier's directory for a composite one. It
+  answers "am I already open on this path?" for code that can't use `NewDiskShared`.
 
 ## Custom stores
 

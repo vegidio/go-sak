@@ -23,6 +23,27 @@ func NewMemoizer(store internal.Store) *Memoizer {
 	return &Memoizer{Store: store}
 }
 
+// pathed is implemented by the stores that live in a directory. It is deliberately not part of the Store interface: a
+// memory store has no directory, and forcing it to report an empty one would make "" ambiguous between "no disk" and
+// "a disk store that somehow lost its path".
+type pathed interface {
+	Path() string
+}
+
+// Path reports the directory backing this memoizer, or an empty string for one that keeps nothing on disk.
+//
+// It answers the question a process has to settle before opening a store a second time. Badger's directory lock is per
+// directory and is not reentrant, so a process that has already opened a path cannot open it again - it deadlocks
+// against itself, and the error looks exactly like another process holding the lock. Comparing this against the path
+// about to be opened is what tells those two apart. See NewDiskShared, which removes the need to ask at all.
+func (m *Memoizer) Path() string {
+	if p, ok := m.Store.(pathed); ok {
+		return p.Path()
+	}
+
+	return ""
+}
+
 // Cleanup reclaims the storage still held by entries whose TTL has expired.
 //
 // Expired entries are never served, but on disk the space they occupy isn't freed automatically: the underlying

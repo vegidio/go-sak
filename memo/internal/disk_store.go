@@ -15,6 +15,11 @@ import (
 type DiskStore struct {
 	db *badger.DB
 
+	// path is the directory this store was opened under. Kept so a caller can ask which store it is holding: Badger's
+	// directory lock is per directory and is not reentrant, so "am I already open on this path?" is the question a
+	// process has to answer before trying to open one again.
+	path string
+
 	// Closed by Close before it queues on mu, so a sweep in flight bails out instead of making Close wait for it.
 	// Doubles as the "this store is closing" flag.
 	stop chan struct{}
@@ -62,7 +67,7 @@ func NewDiskStore(path string, opts CacheOpts) (*DiskStore, error) {
 		return nil, err
 	}
 
-	s := &DiskStore{db: db, stop: make(chan struct{})}
+	s := &DiskStore{db: db, path: path, stop: make(chan struct{})}
 
 	// Reclaim whatever the previous run left behind. This runs in the background so opening the store stays cheap; if
 	// Close arrives first it wins the mutex and the sweep turns into a no-op.
@@ -195,6 +200,11 @@ func (s *DiskStore) purgeExpired(ctx context.Context) error {
 	}
 
 	return wb.Flush()
+}
+
+// Path reports the directory this store was opened under.
+func (s *DiskStore) Path() string {
+	return s.path
 }
 
 // Close releases the store. It is safe to call more than once; every call returns the same error.
