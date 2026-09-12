@@ -48,13 +48,14 @@ func viaNvidiaSMIWindows() ([]GPUInfo, error) {
 		return nil, err
 	}
 
-	// Same query as Linux.
-	out, err := run("nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits")
+	// Same query as Linux, including the PCI address this platform has no use for: one shared query keeps the column
+	// positions the parser relies on identical on both.
+	rows, err := runNvidiaSMI("nvidia-smi")
 	if err != nil {
 		return nil, err
 	}
 
-	return parseNvidiaSMIOutput(out)
+	return nvidiaRowsToGPUs(rows), nil
 }
 
 // parseNvidiaSMIOutput parses the CSV output from nvidia-smi and returns GPU information.
@@ -64,16 +65,26 @@ func parseNvidiaSMIOutput(out []byte) ([]GPUInfo, error) {
 		return nil, err
 	}
 
-	gpus := make([]GPUInfo, 0, len(rows))
-	for _, row := range rows {
-		gpus = append(gpus, GPUInfo{Name: row.name, Vendor: "NVIDIA", Memory: row.memory})
-	}
-
-	return gpus, nil
+	return nvidiaRowsToGPUs(rows), nil
 }
 
-// parseNvidiaSMIRows parses the CSV output from nvidia-smi. The PCI bus ID is optional: it's only present when it was
-// part of the query, and is left empty otherwise.
+// nvidiaRowsToGPUs drops the PCI address the Windows path does not merge on, keeping everything else.
+func nvidiaRowsToGPUs(rows []nvidiaGPU) []GPUInfo {
+	gpus := make([]GPUInfo, 0, len(rows))
+	for _, row := range rows {
+		gpus = append(gpus, GPUInfo{
+			Name:              row.name,
+			Vendor:            "NVIDIA",
+			Memory:            row.memory,
+			ComputeCapability: row.computeCap,
+		})
+	}
+
+	return gpus
+}
+
+// parseNvidiaSMIRows parses the CSV output from nvidia-smi. The PCI bus ID and the compute capability are both
+// optional: each is only present when it was part of the query, and is left at its zero value otherwise.
 func parseNvidiaSMIRows(out []byte) ([]nvidiaGPU, error) {
 	lines := nonEmptyLines(string(out))
 	if len(lines) == 0 {
@@ -96,12 +107,24 @@ func parseNvidiaSMIRows(out []byte) ([]nvidiaGPU, error) {
 			continue
 		}
 
+		// Both trailing columns are optional: the Windows probe historically queried neither, and compute_cap is
+		// dropped from the query entirely on drivers that do not know it.
 		busID := ""
 		if len(parts) > 2 {
 			busID = normalizePCISlot(parts[2])
 		}
 
-		gpus = append(gpus, nvidiaGPU{name: name, memory: uint(mem64), busID: busID})
+		computeCap := ComputeCapability{}
+		if len(parts) > 3 {
+			computeCap = parseComputeCapability(parts[3])
+		}
+
+		gpus = append(gpus, nvidiaGPU{
+			name:       name,
+			memory:     uint(mem64),
+			busID:      busID,
+			computeCap: computeCap,
+		})
 	}
 
 	if len(gpus) == 0 {

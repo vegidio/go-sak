@@ -16,17 +16,22 @@ import (
 
 // region - Linux
 
+// wslNvidiaSMI is where the Windows driver's nvidia-smi is mounted inside WSL, which is not on PATH there.
+const wslNvidiaSMI = "/usr/lib/wsl/lib/nvidia-smi"
+
 // linuxGPU is a GPU detected by one of the Linux probes, carrying the PCI address used to merge the probes.
 type linuxGPU struct {
 	GPUInfo
 	slot string // normalized PCI address, e.g. "0000:01:00.0"; empty when the probe doesn't report one
 }
 
-// nvidiaGPU is a row of nvidia-smi output; busID is empty when the driver didn't report it.
+// nvidiaGPU is a row of nvidia-smi output; busID is empty when the driver didn't report it, and computeCap is the
+// zero value when the driver is too old to know the field.
 type nvidiaGPU struct {
-	name   string
-	memory uint
-	busID  string
+	name       string
+	memory     uint
+	busID      string
+	computeCap ComputeCapability
 }
 
 func linuxGPUInfo() ([]GPUInfo, error) {
@@ -73,23 +78,19 @@ func linuxGPUInfo() ([]GPUInfo, error) {
 }
 
 func viaNvidiaSMILinux() ([]nvidiaGPU, error) {
-	const query = "--query-gpu=name,memory.total,pci.bus_id"
-
-	out, err := run("nvidia-smi", query, "--format=csv,noheader,nounits")
+	gpus, err := runNvidiaSMI("nvidia-smi")
 	if err != nil {
 		// Common WSL location if not on PATH
 		if runtime.GOOS == "linux" {
-			if _, statErr := os.Stat("/usr/lib/wsl/lib/nvidia-smi"); statErr == nil {
-				out, err = run("/usr/lib/wsl/lib/nvidia-smi", query, "--format=csv,noheader,nounits")
+			if _, statErr := os.Stat(wslNvidiaSMI); statErr == nil {
+				return runNvidiaSMI(wslNvidiaSMI)
 			}
 		}
-	}
 
-	if err != nil {
 		return nil, err
 	}
 
-	return parseNvidiaSMIRows(out)
+	return gpus, nil
 }
 
 func viaLinuxDRMSysfs() ([]linuxGPU, error) {
@@ -240,8 +241,13 @@ func mergeNvidiaGPUs(base []linuxGPU, nvidia []nvidiaGPU) []linuxGPU {
 
 		if idx < 0 {
 			base = append(base, linuxGPU{
-				GPUInfo: GPUInfo{Name: gpu.name, Vendor: "NVIDIA", Memory: gpu.memory},
-				slot:    gpu.busID,
+				GPUInfo: GPUInfo{
+					Name:              gpu.name,
+					Vendor:            "NVIDIA",
+					Memory:            gpu.memory,
+					ComputeCapability: gpu.computeCap,
+				},
+				slot: gpu.busID,
 			})
 			continue
 		}
@@ -250,6 +256,7 @@ func mergeNvidiaGPUs(base []linuxGPU, nvidia []nvidiaGPU) []linuxGPU {
 		base[idx].Name = gpu.name
 		base[idx].Vendor = "NVIDIA"
 		base[idx].Memory = gpu.memory
+		base[idx].ComputeCapability = gpu.computeCap
 	}
 
 	return base

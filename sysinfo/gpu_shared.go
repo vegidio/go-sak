@@ -11,6 +11,43 @@ import (
 
 // Helpers shared by the per-platform GPU probes.
 
+// The nvidia-smi query used by both the Linux and the Windows probe, in two forms. The columns are positional, so
+// the optional one goes last and parseNvidiaSMIRows can tell the two apart by counting fields.
+//
+// pci.bus_id is asked for on both platforms even though only Linux merges on it, so that one parser can serve both
+// without the column order depending on who is calling.
+const (
+	nvidiaSMIBaseFields = "--query-gpu=name,memory.total,pci.bus_id"
+	nvidiaSMIFullFields = nvidiaSMIBaseFields + ",compute_cap"
+	nvidiaSMIFormat     = "--format=csv,noheader,nounits"
+)
+
+// runNvidiaSMI queries nvidia-smi at bin and parses its rows, asking for the compute capability and retrying without
+// it when the driver does not recognise the field.
+//
+// The retry is the whole point of this helper. nvidia-smi rejects the entire query when one field is unknown, and
+// compute_cap only exists from the 450.51.06 driver onwards - so folding it into the base query would turn "this
+// driver cannot report a compute capability" into "this machine has no GPU", on precisely the legacy cards whose
+// capability a caller is most likely trying to establish. The common case still costs one process: the fallback only
+// runs after a failure.
+//
+// A missing nvidia-smi is returned unwrapped on the first attempt rather than retried, so isExecNotFound keeps
+// working for callers that treat "not installed" as unremarkable.
+func runNvidiaSMI(bin string) ([]nvidiaGPU, error) {
+	out, err := run(bin, nvidiaSMIFullFields, nvidiaSMIFormat)
+	if err != nil {
+		if isExecNotFound(err) {
+			return nil, err
+		}
+
+		if out, err = run(bin, nvidiaSMIBaseFields, nvidiaSMIFormat); err != nil {
+			return nil, err
+		}
+	}
+
+	return parseNvidiaSMIRows(out)
+}
+
 // isExecNotFound reports whether err means the tool simply is not installed, as opposed to being installed and
 // failing. run wraps the underlying error with %w, so this is an exact check rather than a search through the
 // message text - which was both locale-dependent and prone to matching a tool's own "not found" output.
